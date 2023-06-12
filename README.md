@@ -15,7 +15,7 @@ Smart contract indexing node
 
 ## Intro
 
-A smart contract node indexes smart contract transfer events and exposes an API to query them. The indexed data is stored into sqlite dbs (1 per contract + token id).
+A smart contract node indexes smart contract transfer events and exposes an API to query them. The indexed data is stored into sqlite dbs (1 per contract + token id + chain id).
 
 The purpose is to make it easier and faster to query event data.
 

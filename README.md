@@ -58,3 +58,7 @@ You can also omit the env flag if you set them manually yourself before running 
 `-port` [int]: port you would like the REST API to be exposed on.
 
 `-ws` [bool]: include this flag if you would like to use the websocket url instead
+
+## Local storage
+
+All dbs are stored under your home folder `~/.cw/`.

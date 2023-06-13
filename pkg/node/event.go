@@ -1,11 +1,5 @@
 package node
 
-import (
-	"time"
-
-	"github.com/ethereum/go-ethereum/common"
-)
-
 type EventState string
 
 const (
@@ -15,12 +9,13 @@ const (
 )
 
 type Event struct {
-	Address     common.Address `json:"address"`
-	State       EventState     `json:"state"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	BlockNumber string         `json:"block_number"`
-	Signature   string         `json:"signature"`
-	Name        string         `json:"name"`
-	Symbol      string         `json:"symbol"`
+	Contract   string     `json:"contract"`
+	State      EventState `json:"state"`
+	CreatedAt  SQLiteTime `json:"created_at"`
+	UpdatedAt  SQLiteTime `json:"updated_at"`
+	StartBlock int64      `json:"start_block"`
+	LastBlock  int64      `json:"last_block"`
+	Function   string     `json:"function"`
+	Name       string     `json:"name"`
+	Symbol     string     `json:"symbol"`
 }

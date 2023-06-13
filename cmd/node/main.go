@@ -18,6 +18,8 @@ func main() {
 
 	port := flag.Int("port", 3000, "port to listen on")
 
+	ws := flag.Bool("ws", false, "enable websocket")
+
 	flag.Parse()
 
 	ctx := context.Background()
@@ -29,7 +31,15 @@ func main() {
 
 	log.Default().Println("connecting to rpc...")
 
-	ethreq, err := ethrequest.NewEthService(ctx, conf.RPCWSURL)
+	rpcUrl := conf.RPCURL
+	if *ws {
+		log.Default().Println("running in websocket mode...")
+		rpcUrl = conf.RPCWSURL
+	} else {
+		log.Default().Println("running in standard http mode...")
+	}
+
+	ethreq, err := ethrequest.NewEthService(ctx, rpcUrl)
 	if err != nil {
 		log.Fatal(err)
 	}

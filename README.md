@@ -31,6 +31,30 @@ Our aim is to support the most popular token standards.
 
 `go get ./...`
 
+## Setup .env file
+
+`cp .example.env .env`
+
+Replace URLs with your own RPC urls
+
 ## Run node
 
-`go run cmd/node/main.go -rpc x`
+Standard with an http url:
+
+`go run cmd/node/main.go -env .env`
+
+If you have a websocket url:
+
+`go run cmd/node/main.go -env .env -ws`
+
+You can also omit the env flag if you set them manually yourself before running the program (containerization setup where you don't want to include the .env in the image).
+
+`go run cmd/node/main.go`
+
+## Flags
+
+`-env` [string]: path to your `.env` file.
+
+`-port` [int]: port you would like the REST API to be exposed on.
+
+`-ws` [bool]: include this flag if you would like to use the websocket url instead

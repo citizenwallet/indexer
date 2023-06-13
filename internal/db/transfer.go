@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"math/big"
 
 	"github.com/citizenwallet/node/internal/storage"
 )
@@ -57,7 +58,7 @@ func createTransferTable(db *sql.DB) error {
 		created_at TEXT NOT NULL,
 		from_addr TEXT NOT NULL,
 		to_addr TEXT NOT NULL,
-		value INTEGER NOT NULL,
+		value TEXT NOT NULL,
 		data BLOB
 	)
 	`)
@@ -92,7 +93,7 @@ func createTransferTableIndexes(db *sql.DB) error {
 }
 
 // AddTransfer adds a transfer to the db
-func (db *TransferDB) AddTransfer(hash string, tokenID int64, createdAt string, fromAddr string, toAddr string, value int64, data []byte) error {
+func (db *TransferDB) AddTransfer(hash string, tokenID int64, createdAt string, fromAddr string, toAddr string, value *big.Int, data []byte) error {
 
 	// insert transfer on conflict update
 	_, err := db.db.Exec(`
@@ -105,7 +106,7 @@ func (db *TransferDB) AddTransfer(hash string, tokenID int64, createdAt string, 
 		to_addr = excluded.to_addr,
 		value = excluded.value,
 		data = excluded.data
-	`, hash, tokenID, createdAt, fromAddr, toAddr, value, data)
+	`, hash, tokenID, createdAt, fromAddr, toAddr, value.String(), data)
 
 	return err
 }

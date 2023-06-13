@@ -161,7 +161,10 @@ func (i *Indexer) Start() error {
 						trsf.From = common.HexToAddress(log.Topics[1].Hex())
 						trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
-						txdb.AddTransfer(log.TxHash.Hex(), 0, blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Value.Int64(), nil)
+						err = txdb.AddTransfer(log.TxHash.Hex(), 0, blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Value, nil)
+						if err != nil {
+							return err
+						}
 					case erc721sig:
 						var trsf erc721.Erc721Transfer
 
@@ -173,7 +176,10 @@ func (i *Indexer) Start() error {
 						trsf.From = common.HexToAddress(log.Topics[1].Hex())
 						trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
-						txdb.AddTransfer(log.TxHash.Hex(), trsf.TokenId.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), 1, nil)
+						err = txdb.AddTransfer(log.TxHash.Hex(), trsf.TokenId.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), common.Big1, nil)
+						if err != nil {
+							return err
+						}
 					case erc1155sig:
 						var trsf erc1155.Erc1155TransferSingle
 
@@ -185,7 +191,10 @@ func (i *Indexer) Start() error {
 						trsf.From = common.HexToAddress(log.Topics[2].Hex())
 						trsf.To = common.HexToAddress(log.Topics[3].Hex())
 
-						txdb.AddTransfer(log.TxHash.Hex(), trsf.Id.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Value.Int64(), nil)
+						err = txdb.AddTransfer(log.TxHash.Hex(), trsf.Id.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Value, nil)
+						if err != nil {
+							return err
+						}
 
 						// TODO: parse batch transfers
 					}

@@ -9,6 +9,7 @@ import (
 	"github.com/citizenwallet/node/internal/db"
 	"github.com/citizenwallet/node/internal/ethrequest"
 	"github.com/citizenwallet/node/pkg/indexer"
+	"github.com/citizenwallet/node/pkg/router"
 )
 
 func main() {
@@ -73,6 +74,12 @@ func main() {
 	log.Default().Println("starting rpc listener service...")
 
 	log.Default().Println("starting api service...")
+
+	api := router.NewServer(chid, ethreq, d)
+
+	go func() {
+		quitAck <- api.Start(*port)
+	}()
 
 	log.Default().Println("listening on port: ", *port)
 

@@ -8,18 +8,15 @@ import (
 )
 
 type TransferDB struct {
-	ChainID  int64
-	Contract string
-
 	path string
 	db   *sql.DB
 }
 
 // NewTransferDB creates a new DB
-func NewTransferDB(chainID int64, contract string) (*TransferDB, error) {
+func NewTransferDB(name string) (*TransferDB, error) {
 
 	basePath := storage.GetUserHomeDir()
-	path := fmt.Sprintf("%s/%s/transfers_%v_%s.db", basePath, dbBaseFolder, chainID, contract)
+	path := fmt.Sprintf("%s/%s/logs_%s.db", basePath, dbBaseFolder, name)
 
 	// check if db exists before opening, since we use rwc mode
 	exists := storage.Exists(path)
@@ -33,21 +30,21 @@ func NewTransferDB(chainID int64, contract string) (*TransferDB, error) {
 		// create table
 		err = createTransferTable(db)
 		if err != nil {
+			println("error creating transfer table")
 			return nil, err
 		}
 
 		// create indexes
 		err = createTransferTableIndexes(db)
 		if err != nil {
+			println("error creating transfer table indexes")
 			return nil, err
 		}
 	}
 
 	return &TransferDB{
-		ChainID:  chainID,
-		Contract: contract,
-		path:     path,
-		db:       db,
+		path: path,
+		db:   db,
 	}, nil
 }
 
@@ -57,9 +54,9 @@ func createTransferTable(db *sql.DB) error {
 	CREATE TABLE t_transfers (
 		hash TEXT NOT NULL PRIMARY KEY,
 		token_id INTEGER NOT NULL,
-		date TEXT NOT NULL,
-		from_address TEXT NOT NULL,
-		to_address TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		from_addr TEXT NOT NULL,
+		to_addr TEXT NOT NULL,
 		value INTEGER NOT NULL,
 		data BLOB NOT NULL
 	)
@@ -71,21 +68,21 @@ func createTransferTable(db *sql.DB) error {
 // createTransferTableIndexes creates the indexes for transfers in the given db
 func createTransferTableIndexes(db *sql.DB) error {
 	_, err := db.Exec(`
-	CREATE INDEX idx_transfers_token_id_date ON t_transfers (token_id, date);
+	CREATE INDEX idx_transfers_token_id_date ON t_transfers (token_id, created_at);
 	`)
 	if err != nil {
 		return err
 	}
 
 	_, err = db.Exec(`
-	CREATE INDEX idx_transfers_token_id_from_date ON t_transfers (token_id, from, date);
+	CREATE INDEX idx_transfers_token_id_from_date ON t_transfers (token_id, from_addr, created_at);
 	`)
 	if err != nil {
 		return err
 	}
 
 	_, err = db.Exec(`
-	CREATE INDEX idx_transfers_token_id_to_date ON t_transfers (token_id, to, date);
+	CREATE INDEX idx_transfers_token_id_to_date ON t_transfers (token_id, to_addr, created_at);
 	`)
 	if err != nil {
 		return err

@@ -33,4 +33,4 @@ Our aim is to support the most popular token standards.
 
 ## Run node
 
-`go run cmd/node/main.go -rpcUrl x`
+`go run cmd/node/main.go -rpc x`

@@ -61,6 +61,11 @@ func Read(name string) ([]byte, error) {
 	return ioutil.ReadFile(name)
 }
 
+// CreateDir creates a directory
+func CreateDir(dir string) error {
+	return os.MkdirAll(dir, os.FileMode(0755))
+}
+
 // EraseDir erases the contents of a directory
 // taken from: https://stackoverflow.com/questions/33450980/how-to-remove-all-contents-of-a-directory-using-golang
 func EraseDir(dir string) error {

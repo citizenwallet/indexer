@@ -5,21 +5,16 @@ import (
 	"fmt"
 
 	"github.com/citizenwallet/node/internal/storage"
+	"github.com/citizenwallet/node/pkg/node"
 )
 
 type EventDB struct {
-	ChainID int64
-
 	path string
 	db   *sql.DB
 }
 
 // NewTransferDB creates a new DB
-func NewEventDB(chainID int64) (*EventDB, error) {
-
-	basePath := storage.GetUserHomeDir()
-	path := fmt.Sprintf("%s/%s/events_%v.db", basePath, dbBaseFolder, chainID)
-
+func NewEventDB(path string) (*EventDB, error) {
 	// check if db exists before opening, since we use rwc mode
 	exists := storage.Exists(path)
 
@@ -43,9 +38,8 @@ func NewEventDB(chainID int64) (*EventDB, error) {
 	}
 
 	return &EventDB{
-		ChainID: chainID,
-		path:    path,
-		db:      db,
+		path: path,
+		db:   db,
 	}, nil
 }
 
@@ -53,16 +47,16 @@ func NewEventDB(chainID int64) (*EventDB, error) {
 func createEventsTable(db *sql.DB) error {
 	_, err := db.Exec(`
 	CREATE TABLE t_events (
-		address TEXT NOT NULL,
+		contract TEXT NOT NULL,
 		state TEXT NOT NULL,
 		created_at TEXT NOT NULL,
 		updated_at TEXT NOT NULL,
 		start_block INTEGER NOT NULL,
 		last_block INTEGER NOT NULL,
-		signature TEXT NOT NULL,
+		function TEXT NOT NULL,
 		name TEXT NOT NULL,
 		symbol TEXT NOT NULL,
-		UNIQUE(address, signature)
+		UNIQUE(contract, function)
 	)
 	`)
 
@@ -72,18 +66,43 @@ func createEventsTable(db *sql.DB) error {
 // createEventsTableIndexes creates the indexes for events in the given db
 func createEventsTableIndexes(db *sql.DB) error {
 	_, err := db.Exec(`
-	CREATE INDEX idx_events_address_signature ON t_transfers (address, signature);
+	CREATE INDEX idx_events_address_signature ON t_events (contract, function);
 	`)
 	if err != nil {
 		return err
 	}
 
 	_, err = db.Exec(`
-	CREATE INDEX idx_events_address_signature_state ON t_transfers (address, signature, state);
+	CREATE INDEX idx_events_address_signature_state ON t_events (contract, function, state);
 	`)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// GetEvents gets all events from the db
+func (db *EventDB) GetEvents() ([]*node.Event, error) {
+	rows, err := db.db.Query(`
+	SELECT contract, state, created_at, updated_at, start_block, last_block, function, name, symbol
+	FROM t_events
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := []*node.Event{}
+	for rows.Next() {
+		var event node.Event
+		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Function, &event.Name, &event.Symbol)
+		if err != nil {
+			return nil, err
+		}
+
+		events = append(events, &event)
+	}
+
+	return events, nil
 }

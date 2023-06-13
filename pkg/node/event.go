@@ -1,9 +1,5 @@
 package node
 
-import (
-	"time"
-)
-
 type EventState string
 
 const (
@@ -13,13 +9,13 @@ const (
 )
 
 type Event struct {
-	Address    string     `json:"address"`
+	Contract   string     `json:"contract"`
 	State      EventState `json:"state"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	CreatedAt  SQLiteTime `json:"created_at"`
+	UpdatedAt  SQLiteTime `json:"updated_at"`
 	StartBlock int64      `json:"start_block"`
 	LastBlock  int64      `json:"last_block"`
-	Signature  string     `json:"signature"`
+	Function   string     `json:"function"`
 	Name       string     `json:"name"`
 	Symbol     string     `json:"symbol"`
 }

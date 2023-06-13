@@ -8,6 +8,7 @@ import (
 	"github.com/citizenwallet/node/internal/config"
 	"github.com/citizenwallet/node/internal/db"
 	"github.com/citizenwallet/node/internal/ethrequest"
+	"github.com/citizenwallet/node/pkg/indexer"
 )
 
 func main() {
@@ -18,8 +19,6 @@ func main() {
 	port := flag.Int("port", 3000, "port to listen on")
 
 	flag.Parse()
-
-	log.Default().Println("listening on port: ", *port)
 
 	ctx := context.Background()
 
@@ -34,6 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer ethreq.Close()
 
 	log.Default().Println("fetching chain id...")
 
@@ -46,8 +46,29 @@ func main() {
 
 	log.Default().Println("starting internal db service...")
 
-	_, err = db.NewDB(chid)
+	d, err := db.NewDB(chid)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	log.Default().Println("starting indexer service...")
+	i := indexer.New(chid, d, ethreq)
+
+	quitAck := make(chan error)
+
+	go func() {
+		quitAck <- i.Start()
+	}()
+
+	log.Default().Println("starting rpc listener service...")
+
+	log.Default().Println("starting api service...")
+
+	log.Default().Println("listening on port: ", *port)
+
+	for err := range quitAck {
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }

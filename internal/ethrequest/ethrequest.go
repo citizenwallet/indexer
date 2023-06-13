@@ -112,6 +112,18 @@ func (e *EthService) SendRawTransaction(tx string) ([]byte, error) {
 	return nil, err
 }
 
+func (e *EthService) LatestBlock() (*types.Block, error) {
+	return e.client.BlockByNumber(e.ctx, nil)
+}
+
+func (e *EthService) BlockByNumber(number *big.Int) (*types.Block, error) {
+	return e.client.BlockByNumber(e.ctx, number)
+}
+
+func (e *EthService) FilterLogs(q ethereum.FilterQuery) ([]types.Log, error) {
+	return e.client.FilterLogs(e.ctx, q)
+}
+
 func (e *EthService) ChainID() (*big.Int, error) {
 	var id string
 	err := e.rpc.Call(&id, ETHChainID)

@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/citizenwallet/node/internal/storage"
 	"github.com/citizenwallet/node/pkg/node"
@@ -66,6 +67,13 @@ func createEventsTable(db *sql.DB) error {
 // createEventsTableIndexes creates the indexes for events in the given db
 func createEventsTableIndexes(db *sql.DB) error {
 	_, err := db.Exec(`
+	CREATE INDEX idx_events_state ON t_events (state);
+	`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`
 	CREATE INDEX idx_events_address_signature ON t_events (contract, function);
 	`)
 	if err != nil {
@@ -105,4 +113,53 @@ func (db *EventDB) GetEvents() ([]*node.Event, error) {
 	}
 
 	return events, nil
+}
+
+// GetQueuedEvents gets all queued events from the db sorted by created_at
+func (db *EventDB) GetQueuedEvents() ([]*node.Event, error) {
+	rows, err := db.db.Query(`
+	SELECT contract, state, created_at, updated_at, start_block, last_block, function, name, symbol
+	FROM t_events
+	WHERE state = 'queued'
+	ORDER BY created_at ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := []*node.Event{}
+	for rows.Next() {
+		var event node.Event
+		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Function, &event.Name, &event.Symbol)
+		if err != nil {
+			return nil, err
+		}
+
+		events = append(events, &event)
+	}
+
+	return events, nil
+}
+
+// SetEventState sets the state of an event
+func (db *EventDB) SetEventState(contract, function string, state node.EventState) error {
+	_, err := db.db.Exec(`
+	UPDATE t_events
+	SET state = ?, updated_at = ?
+	WHERE contract = ? AND function = ?
+	`, state, time.Now().Format(time.RFC3339), contract, function)
+
+	return err
+}
+
+// SetEventLastBlock sets the last block of an event
+func (db *EventDB) SetEventLastBlock(contract, function string, lastBlock int64) error {
+	_, err := db.db.Exec(`
+	UPDATE t_events
+	SET last_block = ?, updated_at = ?
+	WHERE contract = ? AND function = ?
+	`, lastBlock, time.Now().Format(time.RFC3339), contract, function)
+
+	return err
 }

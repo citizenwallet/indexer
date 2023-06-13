@@ -58,7 +58,7 @@ func createTransferTable(db *sql.DB) error {
 		from_addr TEXT NOT NULL,
 		to_addr TEXT NOT NULL,
 		value INTEGER NOT NULL,
-		data BLOB NOT NULL
+		data BLOB
 	)
 	`)
 
@@ -84,6 +84,21 @@ func createTransferTableIndexes(db *sql.DB) error {
 	_, err = db.Exec(`
 	CREATE INDEX idx_transfers_token_id_to_date ON t_transfers (token_id, to_addr, created_at);
 	`)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// AddTransfer adds a transfer to the db
+func (db *TransferDB) AddTransfer(hash string, tokenID int64, createdAt string, fromAddr string, toAddr string, value int64, data []byte) error {
+
+	// insert transfer
+	_, err := db.db.Exec(`
+	INSERT INTO t_transfers (hash, token_id, created_at, from_addr, to_addr, value, data)
+	VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, hash, tokenID, createdAt, fromAddr, toAddr, value, data)
 	if err != nil {
 		return err
 	}

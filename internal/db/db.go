@@ -45,8 +45,8 @@ func NewDB(chainID *big.Int) (*DB, error) {
 	}
 
 	for _, ev := range evs {
-		name := fmt.Sprintf("%v_%s", chainID, ev.Contract)
-		log.Default().Println("Creating transfer db for: ", name)
+		name := TransferName(chainID, ev.Contract)
+		log.Default().Println("creating transfer db for: ", name)
 		txdb[name], err = NewTransferDB(name)
 		if err != nil {
 			return nil, err
@@ -59,4 +59,7 @@ func NewDB(chainID *big.Int) (*DB, error) {
 	}, nil
 }
 
-// AddEvent adds an event to the db
+// TransferName returns the name of the transfer db for the given contract
+func TransferName(chainID *big.Int, contract string) string {
+	return fmt.Sprintf("%v_%s", chainID, contract)
+}

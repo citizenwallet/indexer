@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/citizenwallet/node/internal/storage"
+	"github.com/citizenwallet/node/pkg/node"
 )
 
 type TransferDB struct {
@@ -109,4 +110,38 @@ func (db *TransferDB) AddTransfer(hash string, tokenID int64, createdAt string, 
 	`, hash, tokenID, createdAt, fromAddr, toAddr, value.String(), data)
 
 	return err
+}
+
+// GetTransfers returns the transfers for a given from_addr or to_addr between a created_at range
+func (db *TransferDB) GetTransfers(tokenID int64, fromAddr string, toAddr string, fromCreatedAt string, toCreatedAt string) ([]*node.Transfer, error) {
+	var transfers []*node.Transfer
+
+	rows, err := db.db.Query(`
+		SELECT hash, token_id, created_at, from_addr, to_addr, value, data
+		FROM t_transfers
+		WHERE token_id = ? AND from_addr = ? AND created_at >= ? AND created_at <= ?
+			OR token_id = ? AND to_addr = ? AND created_at >= ? AND created_at <= ?
+		ORDER BY created_at ASC
+		`, tokenID, fromAddr, fromCreatedAt, toCreatedAt, tokenID, toAddr, fromCreatedAt, toCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var transfer node.Transfer
+		var value string
+
+		err := rows.Scan(&transfer.Hash, &transfer.TokenID, &transfer.CreatedAt, &transfer.From, &transfer.To, &value, &transfer.Data)
+		if err != nil {
+			return nil, err
+		}
+
+		transfer.Value = new(big.Int)
+		transfer.Value.SetString(value, 10)
+
+		transfers = append(transfers, &transfer)
+	}
+
+	return transfers, nil
 }

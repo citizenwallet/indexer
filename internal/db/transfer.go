@@ -94,14 +94,18 @@ func createTransferTableIndexes(db *sql.DB) error {
 // AddTransfer adds a transfer to the db
 func (db *TransferDB) AddTransfer(hash string, tokenID int64, createdAt string, fromAddr string, toAddr string, value int64, data []byte) error {
 
-	// insert transfer
+	// insert transfer on conflict update
 	_, err := db.db.Exec(`
 	INSERT INTO t_transfers (hash, token_id, created_at, from_addr, to_addr, value, data)
 	VALUES (?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT(hash) DO UPDATE SET
+		token_id = excluded.token_id,
+		created_at = excluded.created_at,
+		from_addr = excluded.from_addr,
+		to_addr = excluded.to_addr,
+		value = excluded.value,
+		data = excluded.data
 	`, hash, tokenID, createdAt, fromAddr, toAddr, value, data)
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return err
 }

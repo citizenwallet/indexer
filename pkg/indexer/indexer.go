@@ -11,6 +11,9 @@ import (
 	"github.com/citizenwallet/node/internal/ethrequest"
 	"github.com/citizenwallet/node/internal/sc"
 	"github.com/citizenwallet/node/pkg/node"
+	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc1155"
+	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc20"
+	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc721"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -18,7 +21,7 @@ import (
 )
 
 const (
-	rate = 1000
+	rate = 999
 )
 
 type Indexer struct {
@@ -50,19 +53,20 @@ func (i *Indexer) Start() error {
 	}
 
 	// get the latest block
-	curr, err := i.eth.LatestBlock()
+	latestBlock, err := i.eth.LatestBlock()
 	if err != nil {
 		return err
 	}
+	curr := latestBlock.Number()
 
 	log.Default().Println("indexing ", len(evs), " events")
 
 	// iterate over events and index them
 	for _, ev := range evs {
-		log.Default().Println("indexing event: ", ev.Contract, ev.Function, " from block: ", ev.LastBlock, " to block: ", curr.Number().Int64(), " ...")
+		log.Default().Println("indexing event: ", ev.Contract, ev.Function, " from block: ", ev.LastBlock, " to block: ", curr.Int64(), " ...")
 
 		// check if the event last block matches the latest block of the chain
-		if ev.LastBlock >= curr.Number().Int64() {
+		if ev.LastBlock >= curr.Int64() {
 			// event is up to date
 			err = i.db.EventDB.SetEventState(ev.Contract, ev.Function, node.EventStateIndexed)
 			if err != nil {
@@ -89,17 +93,17 @@ func (i *Indexer) Start() error {
 
 		switch fnsig {
 		case erc20sig:
-			contractAbi, err = abi.JSON(strings.NewReader(string(sc.ERC20ABI)))
+			contractAbi, err = abi.JSON(strings.NewReader(string(erc20.Erc20MetaData.ABI)))
 			if err != nil {
 				return err
 			}
 		case erc721sig:
-			contractAbi, err = abi.JSON(strings.NewReader(string(sc.ERC721ABI)))
+			contractAbi, err = abi.JSON(strings.NewReader(string(erc721.Erc721MetaData.ABI)))
 			if err != nil {
 				return err
 			}
 		case erc1155sig:
-			contractAbi, err = abi.JSON(strings.NewReader(string(sc.ERC1155ABI)))
+			contractAbi, err = abi.JSON(strings.NewReader(string(erc1155.Erc1155MetaData.ABI)))
 			if err != nil {
 				return err
 			}
@@ -115,11 +119,9 @@ func (i *Indexer) Start() error {
 
 		contractAddr := common.HexToAddress(ev.Contract)
 
-		blockNum := curr.Number().Int64()
+		blockNum := curr.Int64()
 		// index from the latest block to the last block
 		for blockNum > ev.LastBlock {
-			log.Default().Println("indexing ", rate, " blocks from: ", blockNum)
-
 			startBlock := blockNum - rate
 			if startBlock < ev.LastBlock {
 				startBlock = ev.LastBlock
@@ -138,17 +140,18 @@ func (i *Indexer) Start() error {
 			}
 
 			if len(logs) > 0 {
+				log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " ...")
 				for _, log := range logs {
 					blk, err := i.eth.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
 					if err != nil {
 						return err
 					}
 
-					blktime := time.UnixMilli(int64(blk.Time()))
+					blktime := time.UnixMilli(int64(blk.Time()) * 1000)
 
 					switch fnsig {
 					case erc20sig:
-						var trsf sc.LogERC20Transfer
+						var trsf erc20.Erc20Transfer
 
 						err := contractAbi.UnpackIntoInterface(&trsf, "Transfer", log.Data)
 						if err != nil {
@@ -158,9 +161,9 @@ func (i *Indexer) Start() error {
 						trsf.From = common.HexToAddress(log.Topics[1].Hex())
 						trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
-						txdb.AddTransfer(log.TxHash.Hex(), 0, blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Tokens.Int64(), nil)
+						txdb.AddTransfer(log.TxHash.Hex(), 0, blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Value.Int64(), nil)
 					case erc721sig:
-						var trsf sc.LogERC721Transfer
+						var trsf erc721.Erc721Transfer
 
 						err := contractAbi.UnpackIntoInterface(&trsf, "Transfer", log.Data)
 						if err != nil {
@@ -170,9 +173,9 @@ func (i *Indexer) Start() error {
 						trsf.From = common.HexToAddress(log.Topics[1].Hex())
 						trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
-						txdb.AddTransfer(log.TxHash.Hex(), trsf.TokenID.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), 1, nil)
+						txdb.AddTransfer(log.TxHash.Hex(), trsf.TokenId.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), 1, nil)
 					case erc1155sig:
-						var trsf sc.LogERC1155Transfer
+						var trsf erc1155.Erc1155TransferSingle
 
 						err := contractAbi.UnpackIntoInterface(&trsf, "TransferSingle", log.Data)
 						if err != nil {
@@ -182,7 +185,7 @@ func (i *Indexer) Start() error {
 						trsf.From = common.HexToAddress(log.Topics[2].Hex())
 						trsf.To = common.HexToAddress(log.Topics[3].Hex())
 
-						txdb.AddTransfer(log.TxHash.Hex(), trsf.TokenID.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Tokens.Int64(), nil)
+						txdb.AddTransfer(log.TxHash.Hex(), trsf.Id.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Value.Int64(), nil)
 
 						// TODO: parse batch transfers
 					}
@@ -190,14 +193,14 @@ func (i *Indexer) Start() error {
 			}
 
 			blockNum = startBlock - 1
-
-			err = i.db.EventDB.SetEventLastBlock(ev.Contract, ev.Function, blockNum)
-			if err != nil {
-				return err
-			}
 		}
 
-		// set the event state to indexing
+		err = i.db.EventDB.SetEventLastBlock(ev.Contract, ev.Function, curr.Int64())
+		if err != nil {
+			return err
+		}
+
+		// set the event state to indexed
 		err = i.db.EventDB.SetEventState(ev.Contract, ev.Function, node.EventStateIndexed)
 		if err != nil {
 			return err

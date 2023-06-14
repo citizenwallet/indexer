@@ -58,3 +58,46 @@ You can also omit the env flag if you set them manually yourself before running 
 `-port` [int]: port you would like the REST API to be exposed on.
 
 `-ws` [bool]: include this flag if you would like to use the websocket url instead
+
+## Endpoints
+
+### Logs
+
+`[GET] /logs/{contract_address}/{address}?maxDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10&offset=0`
+
+URL params
+
+`{contract_address}`: the address of the token contract you would like to index.
+
+`{address}`: the address of the "to" or "from" from an event log.
+
+Query params
+
+`maxDate`: a url encoded date string in iso format (RFC3339). Default = now.
+
+`limit`: for pagination, the maximum amount of items that should be returned. Default = 20.
+
+`offset`: for pagination, the row at which the query should start from. Default = 0.
+
+### Events
+
+`[POST] /events`
+
+Adding a new event will trigger indexing of event logs starting from the current latest block on the network until `last_block`. Once indexing is done, `last_block` will be updated so that we only partially re-index next time.
+
+Body
+
+```
+{
+    "contract": "0xDe365ad2E3edA7739f9d61aF96288357CEf38c0a",
+    "start_block": 43640241,
+    "last_block": 43640241,
+    "function": "Transfer(address,address,uint256)",
+    "name": "Brussels Bar Token",
+    "symbol": "BBT"
+}
+```
+
+## Local storage
+
+All dbs are stored under your home folder `~/.cw/`.

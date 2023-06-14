@@ -115,14 +115,41 @@ func (db *EventDB) GetEvents() ([]*node.Event, error) {
 	return events, nil
 }
 
+// GetOutdatedEvents gets all queued events from the db sorted by created_at
+func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*node.Event, error) {
+	rows, err := db.db.Query(`
+	SELECT contract, state, created_at, updated_at, start_block, last_block, function, name, symbol
+	FROM t_events
+	WHERE last_block < ?
+	ORDER BY created_at ASC
+	`, currentBlk)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := []*node.Event{}
+	for rows.Next() {
+		var event node.Event
+		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Function, &event.Name, &event.Symbol)
+		if err != nil {
+			return nil, err
+		}
+
+		events = append(events, &event)
+	}
+
+	return events, nil
+}
+
 // GetQueuedEvents gets all queued events from the db sorted by created_at
 func (db *EventDB) GetQueuedEvents() ([]*node.Event, error) {
 	rows, err := db.db.Query(`
 	SELECT contract, state, created_at, updated_at, start_block, last_block, function, name, symbol
 	FROM t_events
-	WHERE state = 'queued'
+	WHERE state = ?
 	ORDER BY created_at ASC
-	`)
+	`, node.EventStateQueued)
 	if err != nil {
 		return nil, err
 	}
@@ -160,6 +187,25 @@ func (db *EventDB) SetEventLastBlock(contract, function string, lastBlock int64)
 	SET last_block = ?, updated_at = ?
 	WHERE contract = ? AND function = ?
 	`, lastBlock, time.Now().Format(time.RFC3339), contract, function)
+
+	return err
+}
+
+// AddEvent adds an event to the db
+func (db *EventDB) AddEvent(contract string, state node.EventState, startBlk, lastBlk int64, fn, name, symbol string) error {
+	t := node.SQLiteTime(time.Now())
+
+	_, err := db.db.Exec(`
+	INSERT INTO t_events (contract, state, created_at, updated_at, start_block, last_block, function, name, symbol)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT(contract, function) DO UPDATE SET
+		state = excluded.state,
+		updated_at = excluded.updated_at,
+		start_block = excluded.start_block,
+		last_block = excluded.last_block,
+		name = excluded.name,
+		symbol = excluded.symbol
+	`, contract, state, t, t, startBlk, lastBlk, fn, name, symbol)
 
 	return err
 }

@@ -38,3 +38,20 @@ func (t *SQLiteTime) Scan(value interface{}) error {
 
 	return nil
 }
+
+// MarshalJSON implements the json.Marshaler interface.
+func (t SQLiteTime) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("\"%s\"", t.Time().Format(time.RFC3339))), nil
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (t *SQLiteTime) UnmarshalJSON(data []byte) error {
+	st, err := time.Parse(time.RFC3339, string(data[1:len(data)-1]))
+	if err != nil {
+		return err
+	}
+
+	*t = SQLiteTime(st)
+
+	return nil
+}

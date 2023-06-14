@@ -111,7 +111,7 @@ func (i *Indexer) Start() error {
 			return errors.New("unknown function signature")
 		}
 
-		name := db.TransferName(i.chainID, ev.Contract)
+		name := i.db.TransferName(ev.Contract)
 		txdb, ok := i.db.TransferDB[name]
 		if !ok {
 			return errors.New("no db for this contract event")

@@ -14,6 +14,7 @@ const (
 )
 
 type DB struct {
+	chainID    *big.Int
 	EventDB    *EventDB
 	TransferDB map[string]*TransferDB
 }
@@ -44,8 +45,13 @@ func NewDB(chainID *big.Int) (*DB, error) {
 		return nil, err
 	}
 
+	d := &DB{
+		chainID: chainID,
+		EventDB: eventDB,
+	}
+
 	for _, ev := range evs {
-		name := TransferName(chainID, ev.Contract)
+		name := d.TransferName(ev.Contract)
 		log.Default().Println("creating transfer db for: ", name)
 		txdb[name], err = NewTransferDB(name)
 		if err != nil {
@@ -53,13 +59,12 @@ func NewDB(chainID *big.Int) (*DB, error) {
 		}
 	}
 
-	return &DB{
-		EventDB:    eventDB,
-		TransferDB: txdb,
-	}, nil
+	d.TransferDB = txdb
+
+	return d, nil
 }
 
 // TransferName returns the name of the transfer db for the given contract
-func TransferName(chainID *big.Int, contract string) string {
-	return fmt.Sprintf("%v_%s", chainID, contract)
+func (d *DB) TransferName(contract string) string {
+	return fmt.Sprintf("%v_%s", d.chainID, contract)
 }

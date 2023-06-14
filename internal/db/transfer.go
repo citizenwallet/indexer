@@ -51,12 +51,14 @@ func NewTransferDB(name string) (*TransferDB, error) {
 }
 
 // createTransferTable creates a table to store transfers in the given db
+// from_to_addr is an optimization column to allow searching for transfers withouth using OR
 func createTransferTable(db *sql.DB) error {
 	_, err := db.Exec(`
 	CREATE TABLE t_transfers (
 		hash TEXT NOT NULL PRIMARY KEY,
 		token_id INTEGER NOT NULL,
 		created_at TEXT NOT NULL,
+		from_to_addr TEXT NOT NULL,
 		from_addr TEXT NOT NULL,
 		to_addr TEXT NOT NULL,
 		value TEXT NOT NULL,
@@ -77,14 +79,14 @@ func createTransferTableIndexes(db *sql.DB) error {
 	}
 
 	_, err = db.Exec(`
-	CREATE INDEX idx_transfers_token_id_from_date ON t_transfers (token_id, from_addr, created_at);
+	CREATE INDEX idx_transfers_date_from_to_addr ON t_transfers (created_at, from_to_addr COLLATE NOCASE);
 	`)
 	if err != nil {
 		return err
 	}
 
 	_, err = db.Exec(`
-	CREATE INDEX idx_transfers_token_id_to_date ON t_transfers (token_id, to_addr, created_at);
+	CREATE INDEX idx_transfers_token_id_from_to_addr_date ON t_transfers (token_id, from_to_addr COLLATE NOCASE, created_at);
 	`)
 	if err != nil {
 		return err
@@ -98,31 +100,31 @@ func (db *TransferDB) AddTransfer(hash string, tokenID int64, createdAt string, 
 
 	// insert transfer on conflict update
 	_, err := db.db.Exec(`
-	INSERT INTO t_transfers (hash, token_id, created_at, from_addr, to_addr, value, data)
-	VALUES (?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO t_transfers (hash, token_id, created_at, from_to_addr, from_addr, to_addr, value, data)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(hash) DO UPDATE SET
 		token_id = excluded.token_id,
 		created_at = excluded.created_at,
+		from_to_addr = excluded.from_to_addr,
 		from_addr = excluded.from_addr,
 		to_addr = excluded.to_addr,
 		value = excluded.value,
 		data = excluded.data
-	`, hash, tokenID, createdAt, fromAddr, toAddr, value.String(), data)
+	`, hash, tokenID, createdAt, combineFromTo(fromAddr, toAddr), fromAddr, toAddr, value.String(), data)
 
 	return err
 }
 
-// GetTransfers returns the transfers for a given from_addr or to_addr between a created_at range
-func (db *TransferDB) GetTransfers(tokenID int64, fromAddr string, toAddr string, fromCreatedAt string, toCreatedAt string) ([]*node.Transfer, error) {
+// GetTransfers returns the transfers for a given from_to_addr between a created_at range
+func (db *TransferDB) GetTransfers(tokenID int64, addr string, fromCreatedAt string, toCreatedAt string) ([]*node.Transfer, error) {
 	var transfers []*node.Transfer
 
 	rows, err := db.db.Query(`
 		SELECT hash, token_id, created_at, from_addr, to_addr, value, data
 		FROM t_transfers
-		WHERE token_id = ? AND from_addr = ? AND created_at >= ? AND created_at <= ?
-			OR token_id = ? AND to_addr = ? AND created_at >= ? AND created_at <= ?
-		ORDER BY created_at ASC
-		`, tokenID, fromAddr, fromCreatedAt, toCreatedAt, tokenID, toAddr, fromCreatedAt, toCreatedAt)
+		WHERE token_id = ? AND from_to_addr LIKE ? AND created_at >= ? AND created_at <= ?
+		ORDER BY created_at DESC
+		`, tokenID, addr, fromCreatedAt, toCreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -144,4 +146,61 @@ func (db *TransferDB) GetTransfers(tokenID int64, fromAddr string, toAddr string
 	}
 
 	return transfers, nil
+}
+
+// GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated
+func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate node.SQLiteTime, limit, offset int) ([]*node.Transfer, int, error) {
+	likePattern := fmt.Sprintf("%%%s%%", addr)
+
+	// get the total count of transfers for a from_to_addr
+	var total int
+	row := db.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM t_transfers
+		WHERE created_at <= ? AND from_to_addr LIKE ?
+		`, maxDate, likePattern)
+
+	err := row.Scan(&total)
+	if err != nil {
+		return nil, total, err
+	}
+
+	transfers := []*node.Transfer{}
+
+	if total == 0 {
+		return transfers, total, nil
+	}
+
+	rows, err := db.db.Query(`
+		SELECT hash, token_id, created_at, from_to_addr, from_addr, to_addr, value, data
+		FROM t_transfers
+		WHERE created_at <= ? AND from_to_addr LIKE ?
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+		`, maxDate, likePattern, limit, offset)
+	if err != nil {
+		return nil, total, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var transfer node.Transfer
+		var value string
+
+		err := rows.Scan(&transfer.Hash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &value, &transfer.Data)
+		if err != nil {
+			return nil, total, err
+		}
+
+		transfer.Value = new(big.Int)
+		transfer.Value.SetString(value, 10)
+
+		transfers = append(transfers, &transfer)
+	}
+
+	return transfers, total, nil
+}
+
+func combineFromTo(fromAddr string, toAddr string) string {
+	return fmt.Sprintf("%s_%s", fromAddr, toAddr)
 }

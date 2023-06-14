@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/citizenwallet/node/internal/storage"
-	"github.com/citizenwallet/node/pkg/node"
+	"github.com/citizenwallet/indexer/internal/storage"
+	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 
 type EventDB struct {
@@ -91,7 +91,7 @@ func createEventsTableIndexes(db *sql.DB) error {
 }
 
 // GetEvents gets all events from the db
-func (db *EventDB) GetEvents() ([]*node.Event, error) {
+func (db *EventDB) GetEvents() ([]*indexer.Event, error) {
 	rows, err := db.db.Query(`
 	SELECT contract, state, created_at, updated_at, start_block, last_block, function, name, symbol
 	FROM t_events
@@ -101,9 +101,9 @@ func (db *EventDB) GetEvents() ([]*node.Event, error) {
 	}
 	defer rows.Close()
 
-	events := []*node.Event{}
+	events := []*indexer.Event{}
 	for rows.Next() {
-		var event node.Event
+		var event indexer.Event
 		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Function, &event.Name, &event.Symbol)
 		if err != nil {
 			return nil, err
@@ -116,7 +116,7 @@ func (db *EventDB) GetEvents() ([]*node.Event, error) {
 }
 
 // GetOutdatedEvents gets all queued events from the db sorted by created_at
-func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*node.Event, error) {
+func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*indexer.Event, error) {
 	rows, err := db.db.Query(`
 	SELECT contract, state, created_at, updated_at, start_block, last_block, function, name, symbol
 	FROM t_events
@@ -128,9 +128,9 @@ func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*node.Event, error) {
 	}
 	defer rows.Close()
 
-	events := []*node.Event{}
+	events := []*indexer.Event{}
 	for rows.Next() {
-		var event node.Event
+		var event indexer.Event
 		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Function, &event.Name, &event.Symbol)
 		if err != nil {
 			return nil, err
@@ -143,21 +143,21 @@ func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*node.Event, error) {
 }
 
 // GetQueuedEvents gets all queued events from the db sorted by created_at
-func (db *EventDB) GetQueuedEvents() ([]*node.Event, error) {
+func (db *EventDB) GetQueuedEvents() ([]*indexer.Event, error) {
 	rows, err := db.db.Query(`
 	SELECT contract, state, created_at, updated_at, start_block, last_block, function, name, symbol
 	FROM t_events
 	WHERE state = ?
 	ORDER BY created_at ASC
-	`, node.EventStateQueued)
+	`, indexer.EventStateQueued)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	events := []*node.Event{}
+	events := []*indexer.Event{}
 	for rows.Next() {
-		var event node.Event
+		var event indexer.Event
 		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Function, &event.Name, &event.Symbol)
 		if err != nil {
 			return nil, err
@@ -170,7 +170,7 @@ func (db *EventDB) GetQueuedEvents() ([]*node.Event, error) {
 }
 
 // SetEventState sets the state of an event
-func (db *EventDB) SetEventState(contract, function string, state node.EventState) error {
+func (db *EventDB) SetEventState(contract, function string, state indexer.EventState) error {
 	_, err := db.db.Exec(`
 	UPDATE t_events
 	SET state = ?, updated_at = ?
@@ -192,8 +192,8 @@ func (db *EventDB) SetEventLastBlock(contract, function string, lastBlock int64)
 }
 
 // AddEvent adds an event to the db
-func (db *EventDB) AddEvent(contract string, state node.EventState, startBlk, lastBlk int64, fn, name, symbol string) error {
-	t := node.SQLiteTime(time.Now())
+func (db *EventDB) AddEvent(contract string, state indexer.EventState, startBlk, lastBlk int64, fn, name, symbol string) error {
+	t := indexer.SQLiteTime(time.Now())
 
 	_, err := db.db.Exec(`
 	INSERT INTO t_events (contract, state, created_at, updated_at, start_block, last_block, function, name, symbol)

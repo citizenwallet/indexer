@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/citizenwallet/node/internal/storage"
-	"github.com/citizenwallet/node/pkg/node"
+	"github.com/citizenwallet/indexer/internal/storage"
+	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 
 type TransferDB struct {
@@ -116,8 +116,8 @@ func (db *TransferDB) AddTransfer(hash string, tokenID int64, createdAt string, 
 }
 
 // GetTransfers returns the transfers for a given from_to_addr between a created_at range
-func (db *TransferDB) GetTransfers(tokenID int64, addr string, fromCreatedAt string, toCreatedAt string) ([]*node.Transfer, error) {
-	var transfers []*node.Transfer
+func (db *TransferDB) GetTransfers(tokenID int64, addr string, fromCreatedAt string, toCreatedAt string) ([]*indexer.Transfer, error) {
+	var transfers []*indexer.Transfer
 
 	rows, err := db.db.Query(`
 		SELECT hash, token_id, created_at, from_addr, to_addr, value, data
@@ -131,7 +131,7 @@ func (db *TransferDB) GetTransfers(tokenID int64, addr string, fromCreatedAt str
 	defer rows.Close()
 
 	for rows.Next() {
-		var transfer node.Transfer
+		var transfer indexer.Transfer
 		var value string
 
 		err := rows.Scan(&transfer.Hash, &transfer.TokenID, &transfer.CreatedAt, &transfer.From, &transfer.To, &value, &transfer.Data)
@@ -149,7 +149,7 @@ func (db *TransferDB) GetTransfers(tokenID int64, addr string, fromCreatedAt str
 }
 
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated
-func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate node.SQLiteTime, limit, offset int) ([]*node.Transfer, int, error) {
+func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate indexer.SQLiteTime, limit, offset int) ([]*indexer.Transfer, int, error) {
 	likePattern := fmt.Sprintf("%%%s%%", addr)
 
 	// get the total count of transfers for a from_to_addr
@@ -165,7 +165,7 @@ func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate node.SQLiteTime
 		return nil, total, err
 	}
 
-	transfers := []*node.Transfer{}
+	transfers := []*indexer.Transfer{}
 
 	if total == 0 {
 		return transfers, total, nil
@@ -184,7 +184,7 @@ func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate node.SQLiteTime
 	defer rows.Close()
 
 	for rows.Next() {
-		var transfer node.Transfer
+		var transfer indexer.Transfer
 		var value string
 
 		err := rows.Scan(&transfer.Hash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &value, &transfer.Data)

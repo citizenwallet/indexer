@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/citizenwallet/node/internal/db"
-	"github.com/citizenwallet/node/pkg/node"
+	"github.com/citizenwallet/indexer/internal/db"
+	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 
 type Service struct {
@@ -21,7 +21,7 @@ func NewService(db *db.DB) *Service {
 // AddEvent adds an event to the database for future indexing
 func (s *Service) AddEvent(w http.ResponseWriter, r *http.Request) {
 	// parse event from request body
-	ev := &node.Event{}
+	ev := &indexer.Event{}
 
 	err := json.NewDecoder(r.Body).Decode(ev)
 	if err != nil {
@@ -31,7 +31,7 @@ func (s *Service) AddEvent(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	// if we are adding an event, it should be queued for indexing
-	ev.State = node.EventStateQueued
+	ev.State = indexer.EventStateQueued
 
 	// add event to database
 	err = s.db.EventDB.AddEvent(ev.Contract, ev.State, ev.StartBlock, ev.LastBlock, ev.Function, ev.Name, ev.Symbol)

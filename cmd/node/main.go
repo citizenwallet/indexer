@@ -5,15 +5,15 @@ import (
 	"flag"
 	"log"
 
-	"github.com/citizenwallet/node/internal/config"
-	"github.com/citizenwallet/node/internal/db"
-	"github.com/citizenwallet/node/internal/ethrequest"
-	"github.com/citizenwallet/node/pkg/indexer"
-	"github.com/citizenwallet/node/pkg/router"
+	"github.com/citizenwallet/indexer/internal/config"
+	"github.com/citizenwallet/indexer/internal/db"
+	"github.com/citizenwallet/indexer/internal/ethrequest"
+	"github.com/citizenwallet/indexer/pkg/index"
+	"github.com/citizenwallet/indexer/pkg/router"
 )
 
 func main() {
-	log.Default().Println("launching node...")
+	log.Default().Println("launching indexer...")
 
 	env := flag.String("env", "", "path to .env file")
 
@@ -64,9 +64,9 @@ func main() {
 
 	quitAck := make(chan error)
 
-	log.Default().Println("starting indexer service...")
+	log.Default().Println("starting index service...")
 
-	i := indexer.New(chid, d, ethreq)
+	i := index.New(chid, d, ethreq)
 
 	go func() {
 		quitAck <- i.Background()

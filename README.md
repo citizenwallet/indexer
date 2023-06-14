@@ -9,13 +9,13 @@ Move your leftovers coins to your Citizen Wallet on your smartphone.
 
 [Read more.](https://citizenwallet.xyz/)
 
-# Smart Contract Node (ERC20, ERC721, ERC1155)
+# Smart Contract Indexer (ERC20, ERC721, ERC1155)
 
-Smart contract indexing node
+Smart contract indexing program
 
 ## Intro
 
-A smart contract node indexes smart contract transfer events and exposes an API to query them. The indexed data is stored into sqlite dbs (1 per contract + chain id).
+A smart contract indexer indexes smart contract transfer events and exposes an API to query them. The indexed data is stored into sqlite dbs (1 per contract + chain id).
 
 The purpose is to make it easier and faster to query event data.
 

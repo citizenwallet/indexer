@@ -62,13 +62,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Default().Println("starting indexer service...")
-	i := indexer.New(chid, d, ethreq)
-
 	quitAck := make(chan error)
 
+	log.Default().Println("starting indexer service...")
+
+	i := indexer.New(chid, d, ethreq)
+
 	go func() {
-		quitAck <- i.Start()
+		quitAck <- i.Background()
 	}()
 
 	log.Default().Println("starting rpc listener service...")

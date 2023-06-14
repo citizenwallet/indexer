@@ -7,6 +7,7 @@ import (
 
 	"github.com/citizenwallet/node/internal/db"
 	"github.com/citizenwallet/node/internal/ethrequest"
+	"github.com/citizenwallet/node/internal/events"
 	"github.com/citizenwallet/node/internal/logs"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -36,13 +37,18 @@ func (r *Router) Start(port int) error {
 	cr.Use(middleware.Compress(9))
 
 	// instantiate handlers
-	logs := logs.NewService(r.db)
+	l := logs.NewService(r.db)
+	ev := events.NewService(r.db)
 
 	// configure routes
 	cr.Route("/logs", func(cr chi.Router) {
 		cr.Route("/{contractAddr}", func(cr chi.Router) {
-			cr.Get("/{addr}", logs.GetLogs)
+			cr.Get("/{addr}", l.GetLogs)
 		})
+	})
+
+	cr.Route("/events", func(cr chi.Router) {
+		cr.Post("/", ev.AddEvent)
 	})
 
 	// start the server

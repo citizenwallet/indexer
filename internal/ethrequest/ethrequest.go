@@ -29,6 +29,10 @@ func (e *EthService) Client() *ethclient.Client {
 	return e.client
 }
 
+func (e *EthService) Context() context.Context {
+	return e.ctx
+}
+
 func NewEthService(ctx context.Context, endpoint string) (*EthService, error) {
 	rpc, err := rpc.Dial(endpoint)
 	if err != nil {

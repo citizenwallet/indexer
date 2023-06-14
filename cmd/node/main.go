@@ -72,8 +72,6 @@ func main() {
 		quitAck <- i.Background()
 	}()
 
-	log.Default().Println("starting rpc listener service...")
-
 	log.Default().Println("starting api service...")
 
 	api := router.NewServer(chid, ethreq, d)

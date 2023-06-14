@@ -23,7 +23,7 @@ import (
 
 const (
 	rate            = 999 // how many blocks to process at a time
-	backgroundSleep = 10  // how many seconds to sleep between background checks
+	backgroundSleep = 5   // how many seconds to sleep between background checks
 )
 
 type Indexer struct {
@@ -60,28 +60,10 @@ func (i *Indexer) Start() error {
 
 // Background starts an indexer service in the background
 func (i *Indexer) Background() error {
-	err := i.Start()
-	if err != nil {
-		return err
-	}
-
 	for {
-		// get the latest block
-		latestBlock, err := i.eth.LatestBlock()
+		err := i.Start()
 		if err != nil {
 			return err
-		}
-		curr := latestBlock.Number()
-
-		// check if there are any queued events
-		evs, err := i.db.EventDB.GetQueuedEvents()
-		if err != nil {
-			return err
-		}
-
-		err = i.Process(evs, curr)
-		if err != nil {
-			log.Default().Println("indexer error: ", err)
 		}
 
 		time.Sleep(backgroundSleep * time.Second)

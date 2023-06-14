@@ -53,11 +53,13 @@ You can also omit the env flag if you set them manually yourself before running 
 
 ## Flags
 
-`-env` [string]: path to your `.env` file.
+`-env` [string]: path to your `.env` file. (default = '')
 
-`-port` [int]: port you would like the REST API to be exposed on.
+`-port` [int]: port you would like the REST API to be exposed on. (default = 3000)
 
-`-ws` [bool]: include this flag if you would like to use the websocket url instead
+`-sync` [int]: the amount of seconds to wait before syncing events from latest blocks. (default = 5)
+
+`-ws` [bool]: include this flag if you would like to use the websocket url instead. (default = false)
 
 ## Endpoints
 

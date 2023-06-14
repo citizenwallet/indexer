@@ -37,27 +37,35 @@ Our aim is to support the most popular token standards.
 
 Replace URLs with your own RPC urls
 
-## Run node
+## Run indexer
 
 Standard with an http url:
 
-`go run cmd/node/main.go -env .env`
+`go run cmd/indexer/main.go -env .env`
 
 If you have a websocket url:
 
-`go run cmd/node/main.go -env .env -ws`
+`go run cmd/indexer/main.go -env .env -ws`
 
 You can also omit the env flag if you set them manually yourself before running the program (containerization setup where you don't want to include the .env in the image).
 
-`go run cmd/node/main.go`
+`go run cmd/indexer/main.go`
 
 ## Flags
 
-`-env` [string]: path to your `.env` file.
+`-env` [string]: path to your `.env` file. (default = '')
 
-`-port` [int]: port you would like the REST API to be exposed on.
+`-port` [int]: port you would like the REST API to be exposed on. (default = 3000)
 
-`-ws` [bool]: include this flag if you would like to use the websocket url instead
+`-sync` [int]: the amount of seconds to wait before syncing events from latest blocks. (default = 5)
+
+`-ws` [bool]: include this flag if you would like to use the websocket url instead. (default = false)
+
+## Sync
+
+When the indexer starts up, logs are downloaded block by block to make sure all events are up to date.
+
+After the initial indexing work is done, indexer will sync the latest blocks every few seconds.
 
 ## Endpoints
 

@@ -25,6 +25,7 @@ var (
 		"Content-Length",
 		"X-Requested-With",
 		"Accept-Encoding",
+		"Authorization",
 	}
 )
 

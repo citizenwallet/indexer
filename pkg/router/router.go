@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"net/http"
 
+	"github.com/citizenwallet/indexer/internal/auth"
 	"github.com/citizenwallet/indexer/internal/db"
 	"github.com/citizenwallet/indexer/internal/ethrequest"
 	"github.com/citizenwallet/indexer/internal/events"
@@ -15,13 +16,15 @@ import (
 
 type Router struct {
 	chainId *big.Int
+	apiKey  string
 	es      *ethrequest.EthService
 	db      *db.DB
 }
 
-func NewServer(chainId *big.Int, es *ethrequest.EthService, db *db.DB) *Router {
+func NewServer(chainId *big.Int, apiKey string, es *ethrequest.EthService, db *db.DB) *Router {
 	return &Router{
 		chainId,
+		apiKey,
 		es,
 		db,
 	}
@@ -31,9 +34,12 @@ func NewServer(chainId *big.Int, es *ethrequest.EthService, db *db.DB) *Router {
 func (r *Router) Start(port int) error {
 	cr := chi.NewRouter()
 
+	a := auth.New(r.apiKey)
+
 	// configure middleware
 	cr.Use(OptionsMiddleware)
 	cr.Use(HealthMiddleware)
+	cr.Use(a.AuthMiddleware)
 	cr.Use(middleware.Compress(9))
 
 	// instantiate handlers

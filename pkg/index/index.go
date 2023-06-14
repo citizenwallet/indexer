@@ -22,8 +22,7 @@ import (
 )
 
 const (
-	rate            = 999 // how many blocks to process at a time
-	backgroundSleep = 5   // how many seconds to sleep between background checks
+	rate = 999 // how many blocks to process at a time
 )
 
 type Indexer struct {
@@ -59,14 +58,14 @@ func (i *Indexer) Start() error {
 }
 
 // Background starts an indexer service in the background
-func (i *Indexer) Background() error {
+func (i *Indexer) Background(syncrate int) error {
 	for {
 		err := i.Start()
 		if err != nil {
 			return err
 		}
 
-		time.Sleep(backgroundSleep * time.Second)
+		time.Sleep(time.Duration(syncrate) * time.Second)
 	}
 }
 

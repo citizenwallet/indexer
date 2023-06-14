@@ -19,6 +19,8 @@ func main() {
 
 	port := flag.Int("port", 3000, "port to listen on")
 
+	sync := flag.Int("sync", 5, "sync from block number (default: 5)")
+
 	ws := flag.Bool("ws", false, "enable websocket")
 
 	flag.Parse()
@@ -69,7 +71,7 @@ func main() {
 	i := index.New(chid, d, ethreq)
 
 	go func() {
-		quitAck <- i.Background()
+		quitAck <- i.Background(*sync)
 	}()
 
 	log.Default().Println("starting api service...")

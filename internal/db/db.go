@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"log"
 	"math/big"
 	"sync"
 
@@ -42,29 +43,28 @@ func NewDB(chainID *big.Int) (*DB, error) {
 
 	txdb := map[string]*TransferDB{}
 
-	// evs, err := eventDB.GetEvents()
-	// if err != nil {
-	// 	return nil, err
-	// }
+	evs, err := eventDB.GetEvents()
+	if err != nil {
+		return nil, err
+	}
 
-	return &DB{
-		chainID:    chainID,
-		EventDB:    eventDB,
-		TransferDB: txdb,
-	}, nil
+	d := &DB{
+		chainID: chainID,
+		EventDB: eventDB,
+	}
 
-	// for _, ev := range evs {
-	// 	name := d.TransferName(ev.Contract)
-	// 	log.Default().Println("creating transfer db for: ", name)
-	// 	txdb[name], err = NewTransferDB(name)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// }
+	for _, ev := range evs {
+		name := d.TransferName(ev.Contract)
+		log.Default().Println("creating transfer db for: ", name)
+		txdb[name], err = NewTransferDB(name)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-	// d.TransferDB = txdb
+	d.TransferDB = txdb
 
-	// return d, nil
+	return d, nil
 }
 
 // TransferName returns the name of the transfer db for the given contract

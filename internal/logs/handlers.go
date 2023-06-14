@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/citizenwallet/node/internal/common"
-	"github.com/citizenwallet/node/internal/db"
-	"github.com/citizenwallet/node/pkg/node"
+	"github.com/citizenwallet/indexer/internal/common"
+	"github.com/citizenwallet/indexer/internal/db"
+	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -36,7 +36,7 @@ func (s *Service) GetLogs(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t = time.Now()
 	}
-	maxDate := node.SQLiteTime(t)
+	maxDate := indexer.SQLiteTime(t)
 
 	// parse pagination params from url query
 	limitq := r.URL.Query().Get("limit")

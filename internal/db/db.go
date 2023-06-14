@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/citizenwallet/node/internal/storage"
+	"github.com/citizenwallet/indexer/internal/storage"
 	_ "github.com/mattn/go-sqlite3"
 )
 

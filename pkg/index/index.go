@@ -1,4 +1,4 @@
-package indexer
+package index
 
 import (
 	"errors"
@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/citizenwallet/node/internal/db"
-	"github.com/citizenwallet/node/internal/ethrequest"
-	"github.com/citizenwallet/node/internal/sc"
-	"github.com/citizenwallet/node/pkg/node"
+	"github.com/citizenwallet/indexer/internal/db"
+	"github.com/citizenwallet/indexer/internal/ethrequest"
+	"github.com/citizenwallet/indexer/internal/sc"
+	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc1155"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc20"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc721"
@@ -89,7 +89,7 @@ func (i *Indexer) Background() error {
 }
 
 // Process events
-func (i *Indexer) Process(evs []*node.Event, curr *big.Int) error {
+func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 	if len(evs) == 0 {
 		// nothing to do
 		return nil
@@ -110,13 +110,13 @@ func (i *Indexer) Process(evs []*node.Event, curr *big.Int) error {
 	return nil
 }
 
-func (i *Indexer) Index(ev *node.Event, curr *big.Int) error {
+func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 	log.Default().Println("indexing event: ", ev.Contract, ev.Function, " from block: ", ev.LastBlock, " to block: ", curr.Int64(), " ...")
 
 	// check if the event last block matches the latest block of the chain
 	if ev.LastBlock >= curr.Int64() {
 		// event is up to date
-		err := i.db.EventDB.SetEventState(ev.Contract, ev.Function, node.EventStateIndexed)
+		err := i.db.EventDB.SetEventState(ev.Contract, ev.Function, indexer.EventStateIndexed)
 		if err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ func (i *Indexer) Index(ev *node.Event, curr *big.Int) error {
 	}
 
 	// set the event state to indexing
-	err := i.db.EventDB.SetEventState(ev.Contract, ev.Function, node.EventStateIndexing)
+	err := i.db.EventDB.SetEventState(ev.Contract, ev.Function, indexer.EventStateIndexing)
 	if err != nil {
 		return err
 	}
@@ -230,7 +230,7 @@ func (i *Indexer) Index(ev *node.Event, curr *big.Int) error {
 	}
 
 	// set the event state to indexed
-	err = i.db.EventDB.SetEventState(ev.Contract, ev.Function, node.EventStateIndexed)
+	err = i.db.EventDB.SetEventState(ev.Contract, ev.Function, indexer.EventStateIndexed)
 	if err != nil {
 		return err
 	}

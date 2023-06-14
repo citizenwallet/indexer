@@ -5,10 +5,10 @@ import (
 	"math/big"
 	"net/http"
 
-	"github.com/citizenwallet/node/internal/db"
-	"github.com/citizenwallet/node/internal/ethrequest"
-	"github.com/citizenwallet/node/internal/events"
-	"github.com/citizenwallet/node/internal/logs"
+	"github.com/citizenwallet/indexer/internal/db"
+	"github.com/citizenwallet/indexer/internal/ethrequest"
+	"github.com/citizenwallet/indexer/internal/events"
+	"github.com/citizenwallet/indexer/internal/logs"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )

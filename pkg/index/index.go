@@ -92,12 +92,12 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 }
 
 func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
-	log.Default().Println("indexing event: ", ev.Contract, ev.Function, " from block: ", ev.LastBlock, " to block: ", curr.Int64(), " ...")
+	log.Default().Println("indexing event: ", ev.Contract, ev.Standard, " from block: ", ev.LastBlock, " to block: ", curr.Int64(), " ...")
 
 	// check if the event last block matches the latest block of the chain
 	if ev.LastBlock >= curr.Int64() {
 		// event is up to date
-		err := i.db.EventDB.SetEventState(ev.Contract, ev.Function, indexer.EventStateIndexed)
+		err := i.db.EventDB.SetEventState(ev.Contract, ev.Standard, indexer.EventStateIndexed)
 		if err != nil {
 			return err
 		}
@@ -107,37 +107,37 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 	}
 
 	// set the event state to indexing
-	err := i.db.EventDB.SetEventState(ev.Contract, ev.Function, indexer.EventStateIndexing)
+	err := i.db.EventDB.SetEventState(ev.Contract, ev.Standard, indexer.EventStateIndexing)
 	if err != nil {
 		return err
 	}
 
-	fnsig := crypto.Keccak256Hash([]byte(ev.Function))
-
-	erc20sig := crypto.Keccak256Hash([]byte(sc.ERC20Transfer))
-	erc721sig := crypto.Keccak256Hash([]byte(sc.ERC721Transfer))
-	erc1155sig := crypto.Keccak256Hash([]byte(sc.ERC1155Transfer))
-
 	var contractAbi abi.ABI
+	var topics [][]common.Hash
 
-	switch fnsig {
-	case erc20sig:
+	switch ev.Standard {
+	case indexer.ERC20:
 		contractAbi, err = abi.JSON(strings.NewReader(string(erc20.Erc20MetaData.ABI)))
 		if err != nil {
 			return err
 		}
-	case erc721sig:
+
+		topics = [][]common.Hash{{crypto.Keccak256Hash([]byte(sc.ERC20Transfer))}}
+	case indexer.ERC721:
 		contractAbi, err = abi.JSON(strings.NewReader(string(erc721.Erc721MetaData.ABI)))
 		if err != nil {
 			return err
 		}
-	case erc1155sig:
+
+		topics = [][]common.Hash{{crypto.Keccak256Hash([]byte(sc.ERC721Transfer))}}
+	case indexer.ERC1155:
 		contractAbi, err = abi.JSON(strings.NewReader(string(erc1155.Erc1155MetaData.ABI)))
 		if err != nil {
 			return err
 		}
+		topics = [][]common.Hash{{crypto.Keccak256Hash([]byte(sc.ERC1155TransferSingle)), crypto.Keccak256Hash([]byte(sc.ERC1155TransferBatch))}}
 	default:
-		return errors.New("unknown function signature")
+		return errors.New("unsupported token standard")
 	}
 
 	txdb, ok := i.db.GetTransferDB(ev.Contract)
@@ -162,7 +162,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			FromBlock: big.NewInt(startBlock),
 			ToBlock:   big.NewInt(blockNum),
 			Addresses: []common.Address{contractAddr},
-			Topics:    [][]common.Hash{{fnsig}},
+			Topics:    topics,
 		}
 
 		logs, err := i.eth.FilterLogs(query)
@@ -180,18 +180,18 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 
 				blktime := time.UnixMilli(int64(blk.Time()) * 1000)
 
-				switch fnsig {
-				case erc20sig:
+				switch ev.Standard {
+				case indexer.ERC20:
 					err = addERC20Log(txdb, blktime, contractAbi, log)
 					if err != nil {
 						return err
 					}
-				case erc721sig:
+				case indexer.ERC721:
 					err = addERC721Log(txdb, blktime, contractAbi, log)
 					if err != nil {
 						return err
 					}
-				case erc1155sig:
+				case indexer.ERC1155:
 					err = addERC1155Log(txdb, blktime, contractAbi, log)
 					if err != nil {
 						return err
@@ -205,13 +205,13 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 		blockNum = startBlock - 1
 	}
 
-	err = i.db.EventDB.SetEventLastBlock(ev.Contract, ev.Function, curr.Int64())
+	err = i.db.EventDB.SetEventLastBlock(ev.Contract, ev.Standard, curr.Int64())
 	if err != nil {
 		return err
 	}
 
 	// set the event state to indexed
-	err = i.db.EventDB.SetEventState(ev.Contract, ev.Function, indexer.EventStateIndexed)
+	err = i.db.EventDB.SetEventState(ev.Contract, ev.Standard, indexer.EventStateIndexed)
 	if err != nil {
 		return err
 	}
@@ -250,15 +250,45 @@ func addERC721Log(txdb *db.TransferDB, blktime time.Time, contractAbi abi.ABI, l
 }
 
 func addERC1155Log(txdb *db.TransferDB, blktime time.Time, contractAbi abi.ABI, log types.Log) error {
-	var trsf erc1155.Erc1155TransferSingle
+	evsig := log.Topics[0].Hex()
 
-	err := contractAbi.UnpackIntoInterface(&trsf, "TransferSingle", log.Data)
-	if err != nil {
-		return err
+	switch evsig {
+	case crypto.Keccak256Hash([]byte(sc.ERC1155TransferSingle)).Hex():
+		var trsf erc1155.Erc1155TransferSingle
+
+		err := contractAbi.UnpackIntoInterface(&trsf, "TransferSingle", log.Data)
+		if err != nil {
+			return err
+		}
+
+		trsf.From = common.HexToAddress(log.Topics[2].Hex())
+		trsf.To = common.HexToAddress(log.Topics[3].Hex())
+
+		return txdb.AddTransfer(log.TxHash.Hex(), trsf.Id.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Value, nil)
+	case crypto.Keccak256Hash([]byte(sc.ERC1155TransferBatch)).Hex():
+		var trsf erc1155.Erc1155TransferBatch
+
+		err := contractAbi.UnpackIntoInterface(&trsf, "TransferBatch", log.Data)
+		if err != nil {
+			return err
+		}
+
+		if len(trsf.Ids) != len(trsf.Values) {
+			return errors.New("ids and values length mismatch")
+		}
+
+		trsf.From = common.HexToAddress(log.Topics[2].Hex())
+		trsf.To = common.HexToAddress(log.Topics[3].Hex())
+
+		for i, id := range trsf.Ids {
+			err = txdb.AddTransfer(log.TxHash.Hex(), id.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Values[i], nil)
+			if err != nil {
+				return err
+			}
+		}
+	default:
+		return errors.New("unknown function signature")
 	}
 
-	trsf.From = common.HexToAddress(log.Topics[2].Hex())
-	trsf.To = common.HexToAddress(log.Topics[3].Hex())
-
-	return txdb.AddTransfer(log.TxHash.Hex(), trsf.Id.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Value, nil)
+	return nil
 }

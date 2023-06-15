@@ -47,7 +47,7 @@ func (r *Router) Start(port int) error {
 	ev := events.NewService(r.db)
 
 	// configure routes
-	cr.Route("/logs", func(cr chi.Router) {
+	cr.Route("/logs/transfers", func(cr chi.Router) {
 		cr.Route("/{contractAddr}", func(cr chi.Router) {
 			cr.Get("/{addr}", l.GetLogs)
 		})

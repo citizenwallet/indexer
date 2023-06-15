@@ -8,9 +8,9 @@ import (
 
 const (
 	ERC20Transfer         = "Transfer(address,address,uint256)"
-	ERC721Transfer        = "Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
-	ERC1155TransferSingle = "TransferSingle(address indexed operator, address indexed from, address indexed to, uint id, uint value)"
-	ERC1155TransferBatch  = "TransferBatch(address indexed operator, address indexed from, address indexed to, uint[] ids, uint[] values)"
+	ERC721Transfer        = "Transfer(address, address,uint256)"
+	ERC1155TransferSingle = "TransferSingle(address,address,address,uint256,uint256)"
+	ERC1155TransferBatch  = "TransferBatch(address,address,address,uint256[],uint256[])"
 )
 
 type LogERC20Transfer struct {

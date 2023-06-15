@@ -32,14 +32,12 @@ func NewTransferDB(name string) (*TransferDB, error) {
 		// create table
 		err = createTransferTable(db)
 		if err != nil {
-			println("error creating transfer table")
 			return nil, err
 		}
 
 		// create indexes
 		err = createTransferTableIndexes(db)
 		if err != nil {
-			println("error creating transfer table indexes")
 			return nil, err
 		}
 	}

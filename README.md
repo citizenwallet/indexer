@@ -67,11 +67,15 @@ When the indexer starts up, logs are downloaded block by block to make sure all 
 
 After the initial indexing work is done, indexer will sync the latest blocks every few seconds.
 
+### Standards
+
+Syncing is done by standards, querying is done by event types on contracts. ERC20, ERC721, ERC1155 are supported as of this moment. We have only implemented indexing of transfer events.
+
 ## Endpoints
 
 ### Logs
 
-`[GET] /logs/{contract_address}/{address}?maxDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10&offset=0`
+`[GET] /logs/transfers/{contract_address}/{address}?maxDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10&offset=0`
 
 URL params
 
@@ -100,7 +104,7 @@ Body
     "contract": "0xDe365ad2E3edA7739f9d61aF96288357CEf38c0a",
     "start_block": 43640241,
     "last_block": 43640241,
-    "function": "Transfer(address,address,uint256)",
+    "standard": "ERC20",
     "name": "Brussels Bar Token",
     "symbol": "BBT"
 }

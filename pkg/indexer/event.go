@@ -8,6 +8,14 @@ const (
 	EventStateIndexed  EventState = "indexed"
 )
 
+type Standard string
+
+const (
+	ERC20   Standard = "ERC20"
+	ERC721  Standard = "ERC721"
+	ERC1155 Standard = "ERC1155"
+)
+
 type Event struct {
 	Contract   string     `json:"contract"`
 	State      EventState `json:"state"`
@@ -15,7 +23,7 @@ type Event struct {
 	UpdatedAt  SQLiteTime `json:"updated_at"`
 	StartBlock int64      `json:"start_block"`
 	LastBlock  int64      `json:"last_block"`
-	Function   string     `json:"function"`
+	Standard   Standard   `json:"standard"`
 	Name       string     `json:"name"`
 	Symbol     string     `json:"symbol"`
 }

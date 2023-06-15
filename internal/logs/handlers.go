@@ -34,9 +34,10 @@ func (s *Service) GetLogs(w http.ResponseWriter, r *http.Request) {
 
 	t, err := time.Parse(time.RFC3339, maxDateq)
 	if err != nil {
+		println(err.Error())
 		t = time.Now()
 	}
-	maxDate := indexer.SQLiteTime(t)
+	maxDate := indexer.SQLiteTime(t.UTC())
 
 	// parse pagination params from url query
 	limitq := r.URL.Query().Get("limit")

@@ -178,7 +178,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 					return err
 				}
 
-				blktime := time.UnixMilli(int64(blk.Time()) * 1000)
+				blktime := time.UnixMilli(int64(blk.Time()) * 1000).UTC()
 
 				switch ev.Standard {
 				case indexer.ERC20:

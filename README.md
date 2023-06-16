@@ -37,7 +37,25 @@ Our aim is to support the most popular token standards.
 
 Replace URLs with your own RPC urls
 
+## Build (optional)
+
+This will build for the current platform you are on. It's possible to cross-compile if you provide flags.
+
+`go build -o indexer ./cmd/indexer/main.go`
+
+Make it executable
+
+`chmod +x indexer`
+
 ## Run indexer
+
+Run the build (doesn't require Go to be installed)
+
+`./indexer`
+
+Run from the source files directly (Go needs to be installed)
+
+`go run cmd/indexer/main.go`
 
 Standard with an http url:
 

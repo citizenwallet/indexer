@@ -19,7 +19,7 @@ func NewEventDB(path string) (*EventDB, error) {
 	// check if db exists before opening, since we use rwc mode
 	exists := storage.Exists(path)
 
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?cache=shared&mode=rwc", path))
+	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?%s", path, dbConfigString))
 	if err != nil {
 		return nil, err
 	}
@@ -42,6 +42,11 @@ func NewEventDB(path string) (*EventDB, error) {
 		path: path,
 		db:   db,
 	}, nil
+}
+
+// Close closes the db
+func (db *EventDB) Close() error {
+	return db.db.Close()
 }
 
 // createEventsTable creates a table to store events in the given db

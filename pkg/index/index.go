@@ -21,18 +21,16 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-const (
-	rate = 999 // how many blocks to process at a time
-)
-
 type Indexer struct {
+	rate    int
 	chainID *big.Int
 	db      *db.DB
 	eth     *ethrequest.EthService
 }
 
-func New(chainID *big.Int, db *db.DB, eth *ethrequest.EthService) *Indexer {
+func New(rate int, chainID *big.Int, db *db.DB, eth *ethrequest.EthService) *Indexer {
 	return &Indexer{
+		rate:    rate,
 		chainID: chainID,
 		db:      db,
 		eth:     eth,
@@ -153,7 +151,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 	blockNum := curr.Int64()
 	// index from the latest block to the last block
 	for blockNum > ev.LastBlock {
-		startBlock := blockNum - rate
+		startBlock := blockNum - int64(i.rate)
 		if startBlock < ev.LastBlock {
 			startBlock = ev.LastBlock
 		}
@@ -172,6 +170,9 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 
 		if len(logs) > 0 {
 			log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " ...")
+
+			txs := []*indexer.Transfer{}
+
 			for _, log := range logs {
 				blk, err := i.eth.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
 				if err != nil {
@@ -182,22 +183,33 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 
 				switch ev.Standard {
 				case indexer.ERC20:
-					err = addERC20Log(txdb, blktime, contractAbi, log)
-					if err != nil {
-						return err
-					}
-				case indexer.ERC721:
-					err = addERC721Log(txdb, blktime, contractAbi, log)
-					if err != nil {
-						return err
-					}
-				case indexer.ERC1155:
-					err = addERC1155Log(txdb, blktime, contractAbi, log)
+					tx, err := getERC20Log(blktime, contractAbi, log)
 					if err != nil {
 						return err
 					}
 
-					// TODO: parse batch transfers
+					txs = append(txs, tx)
+				case indexer.ERC721:
+					tx, err := getERC721Log(blktime, contractAbi, log)
+					if err != nil {
+						return err
+					}
+
+					txs = append(txs, tx)
+				case indexer.ERC1155:
+					tx, err := getERC1155Logs(blktime, contractAbi, log)
+					if err != nil {
+						return err
+					}
+
+					txs = append(txs, tx...)
+				}
+			}
+
+			if len(txs) > 0 {
+				err = txdb.AddTransfers(txs)
+				if err != nil {
+					return err
 				}
 			}
 		}
@@ -221,36 +233,52 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 	return nil
 }
 
-func addERC20Log(txdb *db.TransferDB, blktime time.Time, contractAbi abi.ABI, log types.Log) error {
+func getERC20Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexer.Transfer, error) {
 	var trsf erc20.Erc20Transfer
 
 	err := contractAbi.UnpackIntoInterface(&trsf, "Transfer", log.Data)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	trsf.From = common.HexToAddress(log.Topics[1].Hex())
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
-	return txdb.AddTransfer(log.TxHash.Hex(), 0, blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Value, nil)
+	return &indexer.Transfer{
+		Hash:      log.TxHash.Hex(),
+		TokenID:   0,
+		CreatedAt: indexer.SQLiteTime(blktime),
+		From:      trsf.From.Hex(),
+		To:        trsf.To.Hex(),
+		Value:     trsf.Value,
+	}, nil
 }
 
-func addERC721Log(txdb *db.TransferDB, blktime time.Time, contractAbi abi.ABI, log types.Log) error {
+func getERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexer.Transfer, error) {
 	var trsf erc721.Erc721Transfer
 
 	err := contractAbi.UnpackIntoInterface(&trsf, "Transfer", log.Data)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	trsf.From = common.HexToAddress(log.Topics[1].Hex())
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
-	return txdb.AddTransfer(log.TxHash.Hex(), trsf.TokenId.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), common.Big1, nil)
+	return &indexer.Transfer{
+		Hash:      log.TxHash.Hex(),
+		TokenID:   trsf.TokenId.Int64(),
+		CreatedAt: indexer.SQLiteTime(blktime),
+		From:      trsf.From.Hex(),
+		To:        trsf.To.Hex(),
+		Value:     common.Big1,
+	}, nil
 }
 
-func addERC1155Log(txdb *db.TransferDB, blktime time.Time, contractAbi abi.ABI, log types.Log) error {
+func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*indexer.Transfer, error) {
 	evsig := log.Topics[0].Hex()
+
+	txs := []*indexer.Transfer{}
 
 	switch evsig {
 	case crypto.Keccak256Hash([]byte(sc.ERC1155TransferSingle)).Hex():
@@ -258,37 +286,48 @@ func addERC1155Log(txdb *db.TransferDB, blktime time.Time, contractAbi abi.ABI, 
 
 		err := contractAbi.UnpackIntoInterface(&trsf, "TransferSingle", log.Data)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		trsf.From = common.HexToAddress(log.Topics[2].Hex())
 		trsf.To = common.HexToAddress(log.Topics[3].Hex())
 
-		return txdb.AddTransfer(log.TxHash.Hex(), trsf.Id.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Value, nil)
+		txs = append(txs, &indexer.Transfer{
+			Hash:      log.TxHash.Hex(),
+			TokenID:   trsf.Id.Int64(),
+			CreatedAt: indexer.SQLiteTime(blktime),
+			From:      trsf.From.Hex(),
+			To:        trsf.To.Hex(),
+			Value:     trsf.Value,
+		})
 	case crypto.Keccak256Hash([]byte(sc.ERC1155TransferBatch)).Hex():
 		var trsf erc1155.Erc1155TransferBatch
 
 		err := contractAbi.UnpackIntoInterface(&trsf, "TransferBatch", log.Data)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		if len(trsf.Ids) != len(trsf.Values) {
-			return errors.New("ids and values length mismatch")
+			return nil, errors.New("ids and values length mismatch")
 		}
 
 		trsf.From = common.HexToAddress(log.Topics[2].Hex())
 		trsf.To = common.HexToAddress(log.Topics[3].Hex())
 
 		for i, id := range trsf.Ids {
-			err = txdb.AddTransfer(log.TxHash.Hex(), id.Int64(), blktime.Format(time.RFC3339), trsf.From.Hex(), trsf.To.Hex(), trsf.Values[i], nil)
-			if err != nil {
-				return err
-			}
+			txs = append(txs, &indexer.Transfer{
+				Hash:      log.TxHash.Hex(),
+				TokenID:   id.Int64(),
+				CreatedAt: indexer.SQLiteTime(blktime),
+				From:      trsf.From.Hex(),
+				To:        trsf.To.Hex(),
+				Value:     trsf.Values[i],
+			})
 		}
 	default:
-		return errors.New("unknown function signature")
+		return nil, errors.New("unknown function signature")
 	}
 
-	return nil
+	return txs, nil
 }

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"math/big"
@@ -23,7 +24,7 @@ func NewTransferDB(name string) (*TransferDB, error) {
 	// check if db exists before opening, since we use rwc mode
 	exists := storage.Exists(path)
 
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?cache=shared&mode=rwc", path))
+	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?%s", path, dbConfigString))
 	if err != nil {
 		return nil, err
 	}
@@ -46,6 +47,11 @@ func NewTransferDB(name string) (*TransferDB, error) {
 		path: path,
 		db:   db,
 	}, nil
+}
+
+// Close closes the db
+func (db *TransferDB) Close() error {
+	return db.db.Close()
 }
 
 // createTransferTable creates a table to store transfers in the given db
@@ -94,7 +100,7 @@ func createTransferTableIndexes(db *sql.DB) error {
 }
 
 // AddTransfer adds a transfer to the db
-func (db *TransferDB) AddTransfer(hash string, tokenID int64, createdAt string, fromAddr string, toAddr string, value *big.Int, data []byte) error {
+func (db *TransferDB) AddTransfer(tx *indexer.Transfer) error {
 
 	// insert transfer on conflict update
 	_, err := db.db.Exec(`
@@ -108,9 +114,39 @@ func (db *TransferDB) AddTransfer(hash string, tokenID int64, createdAt string, 
 		to_addr = excluded.to_addr,
 		value = excluded.value,
 		data = excluded.data
-	`, hash, tokenID, createdAt, combineFromTo(fromAddr, toAddr), fromAddr, toAddr, value.String(), data)
+	`, tx.Hash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Value.String(), tx.Data)
 
 	return err
+}
+
+// AddTransfers adds a list of transfers to the db
+func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
+
+	dbtx, err := db.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+
+	for _, t := range tx {
+		// insert transfer on conflict update
+		_, err := dbtx.Exec(`
+			INSERT INTO t_transfers (hash, token_id, created_at, from_to_addr, from_addr, to_addr, value, data)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(hash) DO UPDATE SET
+				token_id = excluded.token_id,
+				created_at = excluded.created_at,
+				from_to_addr = excluded.from_to_addr,
+				from_addr = excluded.from_addr,
+				to_addr = excluded.to_addr,
+				value = excluded.value,
+				data = excluded.data
+			`, t.Hash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Value.String(), t.Data)
+		if err != nil {
+			return err
+		}
+	}
+
+	return dbtx.Commit()
 }
 
 // GetTransfers returns the transfers for a given from_to_addr between a created_at range
@@ -197,8 +233,4 @@ func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate indexer.SQLiteT
 	}
 
 	return transfers, total, nil
-}
-
-func combineFromTo(fromAddr string, toAddr string) string {
-	return fmt.Sprintf("%s_%s", fromAddr, toAddr)
 }

@@ -23,6 +23,8 @@ func main() {
 
 	ws := flag.Bool("ws", false, "enable websocket")
 
+	rate := flag.Int("rate", 99, "rate to sync (default: 99)")
+
 	flag.Parse()
 
 	ctx := context.Background()
@@ -63,12 +65,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer d.Close()
 
 	quitAck := make(chan error)
 
 	log.Default().Println("starting index service...")
 
-	i := index.New(chid, d, ethreq)
+	i := index.New(*rate, chid, d, ethreq)
 
 	go func() {
 		quitAck <- i.Background(*sync)

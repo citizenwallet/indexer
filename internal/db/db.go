@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	dbBaseFolder = ".cw"
+	dbBaseFolder   = ".cw"
+	dbConfigString = "cache=private&_journal=WAL&mode=rwc"
 )
 
 type DB struct {
@@ -98,4 +99,19 @@ func (d *DB) AddTransferDB(contract string) (*TransferDB, error) {
 	}
 	d.TransferDB[name] = txdb
 	return txdb, nil
+}
+
+// Close closes the db and all its transfer dbs
+func (d *DB) Close() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for i, txdb := range d.TransferDB {
+		err := txdb.Close()
+		if err != nil {
+			return err
+		}
+
+		delete(d.TransferDB, i)
+	}
+	return d.EventDB.Close()
 }

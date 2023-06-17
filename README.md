@@ -87,6 +87,8 @@ You can also omit the env flag if you set them manually yourself before running 
 
 `-ws` [bool]: include this flag if you would like to use the websocket url instead. (default = false)
 
+`-rate` [int]: control how many blocks get processed at a time. (default = 99)
+
 ## Sync
 
 When the indexer starts up, logs are downloaded block by block to make sure all events are up to date.

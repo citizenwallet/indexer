@@ -47,6 +47,14 @@ Make it executable
 
 `chmod +x indexer`
 
+### Cross-compiling from macOS to Linux
+
+Due to the use of go-sqlite3 which uses CGO, compilation is a bit fun.
+
+`brew install FiloSottile/musl-cross/musl-cross` << this can take a while
+
+`CC=x86_64-linux-musl-gcc CXX=x86_64-linux-musl-g++ GOARCH=amd64 GOOS=linux CGO_ENABLED=1 go build -ldflags "-linkmode external -extldflags -static" -o indexer ./cmd/indexer/main.go`
+
 ## Run indexer
 
 Run the build (doesn't require Go to be installed)

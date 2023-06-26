@@ -21,6 +21,12 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
+type ErrIndexing error
+
+var (
+	ErrIndexingRecoverable ErrIndexing = errors.New("error indexing recoverable") // an error occurred while indexing but it is not fatal
+)
+
 type Indexer struct {
 	rate    int
 	chainID *big.Int
@@ -42,7 +48,7 @@ func (i *Indexer) Start() error {
 	// get the latest block
 	latestBlock, err := i.eth.LatestBlock()
 	if err != nil {
-		return err
+		return ErrIndexingRecoverable
 	}
 	curr := latestBlock.Number()
 
@@ -60,6 +66,14 @@ func (i *Indexer) Background(syncrate int) error {
 	for {
 		err := i.Start()
 		if err != nil {
+			// check if the error is recoverable
+			if err == ErrIndexingRecoverable {
+				log.Default().Println("[background] recoverable error: ", err)
+				// wait a bit
+				<-time.After(250 * time.Millisecond)
+				// skip the event
+				continue
+			}
 			return err
 		}
 
@@ -79,9 +93,19 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 	// iterate over events and index them
 	for _, ev := range evs {
 		err := i.Index(ev, curr)
-		if err != nil {
-			return err
+		if err == nil {
+			continue
 		}
+
+		// check if the error is recoverable
+		if err == ErrIndexingRecoverable {
+			log.Default().Println("[process] recoverable error: ", err)
+			// wait a bit
+			<-time.After(250 * time.Millisecond)
+			// skip the event
+			continue
+		}
+		return err
 	}
 
 	log.Default().Println("indexing done")
@@ -165,7 +189,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 
 		logs, err := i.eth.FilterLogs(query)
 		if err != nil {
-			return err
+			return ErrIndexingRecoverable
 		}
 
 		if len(logs) > 0 {
@@ -176,7 +200,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			for _, log := range logs {
 				blk, err := i.eth.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
 				if err != nil {
-					return err
+					return ErrIndexingRecoverable
 				}
 
 				blktime := time.UnixMilli(int64(blk.Time()) * 1000).UTC()

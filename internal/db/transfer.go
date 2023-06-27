@@ -234,3 +234,55 @@ func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate indexer.SQLiteT
 
 	return transfers, total, nil
 }
+
+// GetNewTransfers returns the transfers for a given from_addr or to_addr from a given date
+func (db *TransferDB) GetNewTransfers(addr string, fromDate indexer.SQLiteTime) ([]*indexer.Transfer, error) {
+	likePattern := fmt.Sprintf("%%%s%%", addr)
+
+	// get the total count of transfers for a from_to_addr
+	var total int
+	row := db.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM t_transfers
+		WHERE created_at >= ? AND from_to_addr LIKE ?
+		`, fromDate, likePattern)
+
+	err := row.Scan(&total)
+	if err != nil {
+		return nil, err
+	}
+
+	transfers := []*indexer.Transfer{}
+
+	if total == 0 {
+		return transfers, nil
+	}
+
+	rows, err := db.db.Query(`
+		SELECT hash, token_id, created_at, from_to_addr, from_addr, to_addr, value, data
+		FROM t_transfers
+		WHERE created_at >= ? AND from_to_addr LIKE ?
+		ORDER BY created_at DESC
+		`, fromDate, likePattern)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var transfer indexer.Transfer
+		var value string
+
+		err := rows.Scan(&transfer.Hash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &value, &transfer.Data)
+		if err != nil {
+			return nil, err
+		}
+
+		transfer.Value = new(big.Int)
+		transfer.Value.SetString(value, 10)
+
+		transfers = append(transfers, &transfer)
+	}
+
+	return transfers, nil
+}

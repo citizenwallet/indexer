@@ -50,6 +50,7 @@ func (r *Router) Start(port int) error {
 	cr.Route("/logs/transfers", func(cr chi.Router) {
 		cr.Route("/{contractAddr}", func(cr chi.Router) {
 			cr.Get("/{addr}", l.GetLogs)
+			cr.Get("/{addr}/new", l.GetNewLogs)
 		})
 	})
 

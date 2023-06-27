@@ -70,3 +70,38 @@ func (s *Service) GetLogs(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
+
+func (s *Service) GetNewLogs(w http.ResponseWriter, r *http.Request) {
+	// parse contract address from url params
+	contractAddr := chi.URLParam(r, "contractAddr")
+
+	// parse address from url params
+	addr := chi.URLParam(r, "addr")
+
+	// parse fromDate from url query
+	fromDateq, _ := url.QueryUnescape(r.URL.Query().Get("fromDate"))
+
+	t, err := time.Parse(time.RFC3339, fromDateq)
+	if err != nil {
+		t = time.Now()
+	}
+	fromDate := indexer.SQLiteTime(t.UTC())
+
+	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	// get logs from db
+	logs, err := tdb.GetNewTransfers(addr, fromDate)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = common.BodyMultiple(w, logs, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}

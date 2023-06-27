@@ -135,7 +135,7 @@ func (e *EthService) ChainID() (*big.Int, error) {
 		return nil, err
 	}
 
-	chid, ok := big.NewInt(0).SetString(strip0x(id), 10)
+	chid, ok := big.NewInt(0).SetString(strip0x(id), 16)
 	if !ok {
 		return nil, errors.New("invalid chain id")
 	}

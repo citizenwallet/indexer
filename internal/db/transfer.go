@@ -60,13 +60,16 @@ func createTransferTable(db *sql.DB) error {
 	_, err := db.Exec(`
 	CREATE TABLE t_transfers (
 		hash TEXT NOT NULL PRIMARY KEY,
+		tx_hash TEXT NOT NULL,
 		token_id INTEGER NOT NULL,
 		created_at TEXT NOT NULL,
 		from_to_addr TEXT NOT NULL,
 		from_addr TEXT NOT NULL,
 		to_addr TEXT NOT NULL,
+		nonce INTEGER NOT NULL,
 		value TEXT NOT NULL,
-		data BLOB
+		data BLOB,
+		status TEXT NOT NULL DEFAULT 'success'
 	)
 	`)
 
@@ -76,12 +79,13 @@ func createTransferTable(db *sql.DB) error {
 // createTransferTableIndexes creates the indexes for transfers in the given db
 func createTransferTableIndexes(db *sql.DB) error {
 	_, err := db.Exec(`
-	CREATE INDEX idx_transfers_token_id_date ON t_transfers (token_id, created_at);
+	CREATE INDEX idx_transfers_tx_hash ON t_transfers (tx_hash);
 	`)
 	if err != nil {
 		return err
 	}
 
+	// multi-token queries
 	_, err = db.Exec(`
 	CREATE INDEX idx_transfers_date_from_to_addr ON t_transfers (created_at, from_to_addr COLLATE NOCASE);
 	`)
@@ -89,8 +93,9 @@ func createTransferTableIndexes(db *sql.DB) error {
 		return err
 	}
 
+	// single-token queries
 	_, err = db.Exec(`
-	CREATE INDEX idx_transfers_token_id_from_to_addr_date ON t_transfers (token_id, from_to_addr COLLATE NOCASE, created_at);
+	CREATE INDEX idx_transfers_date_from_token_id_to_addr ON t_transfers (created_at, token_id, from_to_addr COLLATE NOCASE);
 	`)
 	if err != nil {
 		return err
@@ -104,17 +109,20 @@ func (db *TransferDB) AddTransfer(tx *indexer.Transfer) error {
 
 	// insert transfer on conflict update
 	_, err := db.db.Exec(`
-	INSERT INTO t_transfers (hash, token_id, created_at, from_to_addr, from_addr, to_addr, value, data)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO t_transfers (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(hash) DO UPDATE SET
+		tx_hash = excluded.tx_hash,
 		token_id = excluded.token_id,
 		created_at = excluded.created_at,
 		from_to_addr = excluded.from_to_addr,
 		from_addr = excluded.from_addr,
 		to_addr = excluded.to_addr,
+		nonce = excluded.nonce,
 		value = excluded.value,
-		data = excluded.data
-	`, tx.Hash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Value.String(), tx.Data)
+		data = excluded.data,
+		status = excluded.status
+	`, tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data, tx.Status)
 
 	return err
 }
@@ -130,17 +138,20 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 	for _, t := range tx {
 		// insert transfer on conflict update
 		_, err := dbtx.Exec(`
-			INSERT INTO t_transfers (hash, token_id, created_at, from_to_addr, from_addr, to_addr, value, data)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO t_transfers (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(hash) DO UPDATE SET
+				tx_hash = excluded.tx_hash,
 				token_id = excluded.token_id,
 				created_at = excluded.created_at,
 				from_to_addr = excluded.from_to_addr,
 				from_addr = excluded.from_addr,
 				to_addr = excluded.to_addr,
+				nonce = excluded.nonce,
 				value = excluded.value,
-				data = excluded.data
-			`, t.Hash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Value.String(), t.Data)
+				data = excluded.data,
+				status = excluded.status
+			`, t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
 		if err != nil {
 			return err
 		}
@@ -149,41 +160,51 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 	return dbtx.Commit()
 }
 
-// GetTransfers returns the transfers for a given from_to_addr between a created_at range
-func (db *TransferDB) GetTransfers(tokenID int64, addr string, fromCreatedAt string, toCreatedAt string) ([]*indexer.Transfer, error) {
-	var transfers []*indexer.Transfer
+// SetStatus sets the status of a transfer to pending
+func (db *TransferDB) SetStatus(status, hash, from string) error {
+	// if status is success, don't update
+	_, err := db.db.Exec(`
+	UPDATE t_transfers SET status = ? WHERE hash = ? AND from_addr = ? AND status != 'success'
+	`, status, hash, from)
 
-	rows, err := db.db.Query(`
-		SELECT hash, token_id, created_at, from_addr, to_addr, value, data
-		FROM t_transfers
-		WHERE token_id = ? AND from_to_addr LIKE ? AND created_at >= ? AND created_at <= ?
-		ORDER BY created_at DESC
-		`, tokenID, addr, fromCreatedAt, toCreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var transfer indexer.Transfer
-		var value string
-
-		err := rows.Scan(&transfer.Hash, &transfer.TokenID, &transfer.CreatedAt, &transfer.From, &transfer.To, &value, &transfer.Data)
-		if err != nil {
-			return nil, err
-		}
-
-		transfer.Value = new(big.Int)
-		transfer.Value.SetString(value, 10)
-
-		transfers = append(transfers, &transfer)
-	}
-
-	return transfers, nil
+	return err
 }
 
+// // GetTransfers returns the transfers for a given from_to_addr between a created_at range
+// func (db *TransferDB) GetTransfers(tokenID int64, addr string, fromCreatedAt string, toCreatedAt string) ([]*indexer.Transfer, error) {
+// 	var transfers []*indexer.Transfer
+
+// 	rows, err := db.db.Query(`
+// 		SELECT hash, token_id, created_at, from_addr, to_addr, value, data
+// 		FROM t_transfers
+// 		WHERE token_id = ? AND from_to_addr LIKE ? AND created_at >= ? AND created_at <= ?
+// 		ORDER BY created_at DESC
+// 		`, tokenID, addr, fromCreatedAt, toCreatedAt)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer rows.Close()
+
+// 	for rows.Next() {
+// 		var transfer indexer.Transfer
+// 		var value string
+
+// 		err := rows.Scan(&transfer.Hash, &transfer.TokenID, &transfer.CreatedAt, &transfer.From, &transfer.To, &value, &transfer.Data)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+
+// 		transfer.Value = new(big.Int)
+// 		transfer.Value.SetString(value, 10)
+
+// 		transfers = append(transfers, &transfer)
+// 	}
+
+// 	return transfers, nil
+// }
+
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated
-func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate indexer.SQLiteTime, limit, offset int) ([]*indexer.Transfer, int, error) {
+func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate indexer.SQLiteTime, limit, offset int) ([]*indexer.Transfer, int, error) {
 	likePattern := fmt.Sprintf("%%%s%%", addr)
 
 	// get the total count of transfers for a from_to_addr
@@ -191,8 +212,8 @@ func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate indexer.SQLiteT
 	row := db.db.QueryRow(`
 		SELECT COUNT(*)
 		FROM t_transfers
-		WHERE created_at <= ? AND from_to_addr LIKE ?
-		`, maxDate, likePattern)
+		WHERE created_at <= ? AND token_id = ? AND from_to_addr LIKE ?
+		`, maxDate, tokenId, likePattern)
 
 	err := row.Scan(&total)
 	if err != nil {
@@ -206,12 +227,12 @@ func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate indexer.SQLiteT
 	}
 
 	rows, err := db.db.Query(`
-		SELECT hash, token_id, created_at, from_to_addr, from_addr, to_addr, value, data
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers
-		WHERE created_at <= ? AND from_to_addr LIKE ?
+		WHERE created_at <= ? AND token_id = ? AND from_to_addr LIKE ?
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
-		`, maxDate, likePattern, limit, offset)
+		`, maxDate, tokenId, likePattern, limit, offset)
 	if err != nil {
 		return nil, total, err
 	}
@@ -221,7 +242,7 @@ func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate indexer.SQLiteT
 		var transfer indexer.Transfer
 		var value string
 
-		err := rows.Scan(&transfer.Hash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &value, &transfer.Data)
+		err := rows.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
 		if err != nil {
 			return nil, total, err
 		}
@@ -236,7 +257,7 @@ func (db *TransferDB) GetPaginatedTransfers(addr string, maxDate indexer.SQLiteT
 }
 
 // GetNewTransfers returns the transfers for a given from_addr or to_addr from a given date
-func (db *TransferDB) GetNewTransfers(addr string, fromDate indexer.SQLiteTime) ([]*indexer.Transfer, error) {
+func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate indexer.SQLiteTime) ([]*indexer.Transfer, error) {
 	likePattern := fmt.Sprintf("%%%s%%", addr)
 
 	// get the total count of transfers for a from_to_addr
@@ -244,8 +265,8 @@ func (db *TransferDB) GetNewTransfers(addr string, fromDate indexer.SQLiteTime) 
 	row := db.db.QueryRow(`
 		SELECT COUNT(*)
 		FROM t_transfers
-		WHERE created_at >= ? AND from_to_addr LIKE ?
-		`, fromDate, likePattern)
+		WHERE created_at >= ? AND token_id = ? AND from_to_addr LIKE ?
+		`, fromDate, tokenId, likePattern)
 
 	err := row.Scan(&total)
 	if err != nil {
@@ -259,11 +280,11 @@ func (db *TransferDB) GetNewTransfers(addr string, fromDate indexer.SQLiteTime) 
 	}
 
 	rows, err := db.db.Query(`
-		SELECT hash, token_id, created_at, from_to_addr, from_addr, to_addr, value, data
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers
-		WHERE created_at >= ? AND from_to_addr LIKE ?
+		WHERE created_at >= ? AND token_id = ? AND from_to_addr LIKE ?
 		ORDER BY created_at DESC
-		`, fromDate, likePattern)
+		`, fromDate, tokenId, likePattern)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +294,7 @@ func (db *TransferDB) GetNewTransfers(addr string, fromDate indexer.SQLiteTime) 
 		var transfer indexer.Transfer
 		var value string
 
-		err := rows.Scan(&transfer.Hash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &value, &transfer.Data)
+		err := rows.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
 		if err != nil {
 			return nil, err
 		}

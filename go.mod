@@ -3,7 +3,7 @@ module github.com/citizenwallet/indexer
 go 1.20
 
 require (
-	github.com/citizenwallet/smartcontracts v0.0.45
+	github.com/citizenwallet/smartcontracts v0.0.47
 	github.com/ethereum/go-ethereum v1.12.0
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/joho/godotenv v1.5.1
@@ -13,6 +13,7 @@ require (
 
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
+	github.com/daobrussels/smartcontracts v0.0.43 // indirect
 	github.com/deckarep/golang-set/v2 v2.3.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect

@@ -124,6 +124,10 @@ func (e *EthService) BlockByNumber(number *big.Int) (*types.Block, error) {
 	return e.client.BlockByNumber(e.ctx, number)
 }
 
+func (e *EthService) TransactionByHash(hash common.Hash) (tx *types.Transaction, isPending bool, err error) {
+	return e.client.TransactionByHash(e.ctx, hash)
+}
+
 func (e *EthService) FilterLogs(q ethereum.FilterQuery) ([]types.Log, error) {
 	return e.client.FilterLogs(e.ctx, q)
 }
@@ -135,7 +139,7 @@ func (e *EthService) ChainID() (*big.Int, error) {
 		return nil, err
 	}
 
-	chid, ok := big.NewInt(0).SetString(strip0x(id), 16)
+	chid, ok := big.NewInt(0).SetString(strip0x(id), 10)
 	if !ok {
 		return nil, errors.New("invalid chain id")
 	}

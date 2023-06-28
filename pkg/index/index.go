@@ -231,6 +231,12 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			}
 
 			if len(txs) > 0 {
+				println("hashing for ", len(txs), " transfers ...")
+				err = i.generateIndexedHashes(txs)
+				if err != nil {
+					return err
+				}
+
 				err = txdb.AddTransfers(txs)
 				if err != nil {
 					return err
@@ -269,12 +275,13 @@ func getERC20Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexe
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
 	return &indexer.Transfer{
-		Hash:      log.TxHash.Hex(),
+		TxHash:    log.TxHash.Hex(),
 		TokenID:   0,
 		CreatedAt: indexer.SQLiteTime(blktime),
 		From:      trsf.From.Hex(),
 		To:        trsf.To.Hex(),
 		Value:     trsf.Value,
+		Status:    indexer.TransferStatusSuccess,
 	}, nil
 }
 
@@ -290,12 +297,13 @@ func getERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*index
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
 	return &indexer.Transfer{
-		Hash:      log.TxHash.Hex(),
+		TxHash:    log.TxHash.Hex(),
 		TokenID:   trsf.TokenId.Int64(),
 		CreatedAt: indexer.SQLiteTime(blktime),
 		From:      trsf.From.Hex(),
 		To:        trsf.To.Hex(),
 		Value:     common.Big1,
+		Status:    indexer.TransferStatusSuccess,
 	}, nil
 }
 
@@ -317,12 +325,13 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 		trsf.To = common.HexToAddress(log.Topics[3].Hex())
 
 		txs = append(txs, &indexer.Transfer{
-			Hash:      log.TxHash.Hex(),
+			TxHash:    log.TxHash.Hex(),
 			TokenID:   trsf.Id.Int64(),
 			CreatedAt: indexer.SQLiteTime(blktime),
 			From:      trsf.From.Hex(),
 			To:        trsf.To.Hex(),
 			Value:     trsf.Value,
+			Status:    indexer.TransferStatusSuccess,
 		})
 	case crypto.Keccak256Hash([]byte(sc.ERC1155TransferBatch)).Hex():
 		var trsf erc1155.Erc1155TransferBatch
@@ -341,12 +350,13 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 
 		for i, id := range trsf.Ids {
 			txs = append(txs, &indexer.Transfer{
-				Hash:      log.TxHash.Hex(),
+				TxHash:    log.TxHash.Hex(),
 				TokenID:   id.Int64(),
 				CreatedAt: indexer.SQLiteTime(blktime),
 				From:      trsf.From.Hex(),
 				To:        trsf.To.Hex(),
 				Value:     trsf.Values[i],
+				Status:    indexer.TransferStatusSuccess,
 			})
 		}
 	default:
@@ -354,4 +364,22 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 	}
 
 	return txs, nil
+}
+
+func (i *Indexer) generateIndexedHashes(txs []*indexer.Transfer) error {
+
+	for _, tx := range txs {
+		println("fetching transaction by hash: ", tx.TxHash)
+		t, _, err := i.eth.TransactionByHash(common.HexToHash(tx.TxHash))
+		if err != nil {
+			return err
+		}
+
+		tx.Nonce = int64(t.Nonce())
+
+		tx.GenerateHash(i.chainID.Int64())
+		println("generated hash: ", tx.Hash)
+	}
+
+	return nil
 }

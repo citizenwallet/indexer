@@ -79,7 +79,7 @@ func main() {
 
 	log.Default().Println("starting api service...")
 
-	api := router.NewServer(chid, conf.APIKEY, ethreq, d)
+	api := router.NewServer(chid, conf.APIKEY, conf.AccountFactoryAddress, ethreq, d)
 
 	go func() {
 		quitAck <- api.Start(*port)

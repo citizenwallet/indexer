@@ -15,16 +15,18 @@ import (
 )
 
 type Router struct {
-	chainId *big.Int
-	apiKey  string
-	es      *ethrequest.EthService
-	db      *db.DB
+	chainId     *big.Int
+	apiKey      string
+	accFactAddr string
+	es          *ethrequest.EthService
+	db          *db.DB
 }
 
-func NewServer(chainId *big.Int, apiKey string, es *ethrequest.EthService, db *db.DB) *Router {
+func NewServer(chainId *big.Int, apiKey string, accFactAddr string, es *ethrequest.EthService, db *db.DB) *Router {
 	return &Router{
 		chainId,
 		apiKey,
+		accFactAddr,
 		es,
 		db,
 	}
@@ -35,22 +37,31 @@ func (r *Router) Start(port int) error {
 	cr := chi.NewRouter()
 
 	a := auth.New(r.apiKey)
+	comm, err := ethrequest.NewCommunity(r.es, r.accFactAddr)
+	if err != nil {
+		return err
+	}
 
 	// configure middleware
 	cr.Use(OptionsMiddleware)
 	cr.Use(HealthMiddleware)
 	cr.Use(a.AuthMiddleware)
+	cr.Use(SignatureMiddleware)
 	cr.Use(middleware.Compress(9))
 
 	// instantiate handlers
-	l := logs.NewService(r.db)
+	l := logs.NewService(r.chainId, r.db, r.es, comm)
 	ev := events.NewService(r.db)
 
 	// configure routes
 	cr.Route("/logs/transfers", func(cr chi.Router) {
 		cr.Route("/{contractAddr}", func(cr chi.Router) {
-			cr.Get("/{addr}", l.GetLogs)
-			cr.Get("/{addr}/new", l.GetNewLogs)
+			cr.Get("/{addr}", l.Get)
+			cr.Get("/{addr}/new", l.GetNew)
+
+			cr.Post("/{addr}", l.AddSending)
+
+			cr.Patch("/{addr}/{hash}", l.SetStatus)
 		})
 	})
 

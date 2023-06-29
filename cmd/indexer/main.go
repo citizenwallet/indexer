@@ -71,7 +71,11 @@ func main() {
 
 	log.Default().Println("starting index service...")
 
-	i := index.New(*rate, chid, d, ethreq)
+	i, err := index.New(*rate, chid, d, ethreq, ctx, conf.BundlerRPCURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer i.Close()
 
 	go func() {
 		quitAck <- i.Background(*sync)
@@ -79,7 +83,7 @@ func main() {
 
 	log.Default().Println("starting api service...")
 
-	api := router.NewServer(chid, conf.APIKEY, conf.AccountFactoryAddress, ethreq, d)
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, ethreq, d)
 
 	go func() {
 		quitAck <- api.Start(*port)

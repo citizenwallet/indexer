@@ -168,7 +168,6 @@ func (s *Service) AddSending(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Status = indexer.TransferStatusSending
-	log.GenerateHash(s.chainID.Int64())
 
 	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
 	if !ok {
@@ -240,7 +239,7 @@ func (s *Service) SetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = tdb.SetStatus(string(req.Status), hash, accaddr)
+	err = tdb.SetStatus(string(req.Status), hash)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

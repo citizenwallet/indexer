@@ -12,6 +12,11 @@ func (t SQLiteTime) Time() time.Time {
 	return time.Time(t)
 }
 
+// String implements the fmt.Stringer interface.
+func (t SQLiteTime) String() string {
+	return t.Time().Format(time.RFC3339)
+}
+
 // Value implements the driver Valuer interface.
 func (t SQLiteTime) Value() (driver.Value, error) {
 	return t.Time().Format(time.RFC3339), nil

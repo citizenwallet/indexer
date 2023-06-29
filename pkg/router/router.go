@@ -17,15 +17,17 @@ import (
 type Router struct {
 	chainId     *big.Int
 	apiKey      string
+	epAddr      string
 	accFactAddr string
 	es          *ethrequest.EthService
 	db          *db.DB
 }
 
-func NewServer(chainId *big.Int, apiKey string, accFactAddr string, es *ethrequest.EthService, db *db.DB) *Router {
+func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr string, es *ethrequest.EthService, db *db.DB) *Router {
 	return &Router{
 		chainId,
 		apiKey,
+		epAddr,
 		accFactAddr,
 		es,
 		db,
@@ -37,7 +39,7 @@ func (r *Router) Start(port int) error {
 	cr := chi.NewRouter()
 
 	a := auth.New(r.apiKey)
-	comm, err := ethrequest.NewCommunity(r.es, r.accFactAddr)
+	comm, err := ethrequest.NewCommunity(r.es, r.epAddr, r.accFactAddr)
 	if err != nil {
 		return err
 	}

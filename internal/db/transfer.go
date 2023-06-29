@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/citizenwallet/indexer/internal/storage"
 	"github.com/citizenwallet/indexer/pkg/indexer"
@@ -101,6 +102,14 @@ func createTransferTableIndexes(db *sql.DB) error {
 		return err
 	}
 
+	// sending queries
+	_, err = db.Exec(`
+	CREATE INDEX idx_transfers_status_date_from_tx_hash ON t_transfers (status, created_at, tx_hash);
+	`)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -161,47 +170,57 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 }
 
 // SetStatus sets the status of a transfer to pending
-func (db *TransferDB) SetStatus(status, hash, from string) error {
+func (db *TransferDB) SetStatus(status, hash string) error {
 	// if status is success, don't update
 	_, err := db.db.Exec(`
-	UPDATE t_transfers SET status = ? WHERE hash = ? AND from_addr = ? AND status != 'success'
-	`, status, hash, from)
+	UPDATE t_transfers SET status = ? WHERE hash = ? AND status != 'success'
+	`, status, hash)
 
 	return err
 }
 
-// // GetTransfers returns the transfers for a given from_to_addr between a created_at range
-// func (db *TransferDB) GetTransfers(tokenID int64, addr string, fromCreatedAt string, toCreatedAt string) ([]*indexer.Transfer, error) {
-// 	var transfers []*indexer.Transfer
+// SetStatusFromTxHash sets the status of a transfer to pending
+func (db *TransferDB) SetStatusFromTxHash(status, txhash string) error {
+	// if status is success, don't update
+	_, err := db.db.Exec(`
+	UPDATE t_transfers SET status = ? WHERE tx_hash = ? AND status != 'success'
+	`, status, txhash)
 
-// 	rows, err := db.db.Query(`
-// 		SELECT hash, token_id, created_at, from_addr, to_addr, value, data
-// 		FROM t_transfers
-// 		WHERE token_id = ? AND from_to_addr LIKE ? AND created_at >= ? AND created_at <= ?
-// 		ORDER BY created_at DESC
-// 		`, tokenID, addr, fromCreatedAt, toCreatedAt)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer rows.Close()
+	return err
+}
 
-// 	for rows.Next() {
-// 		var transfer indexer.Transfer
-// 		var value string
+// SetTxHash sets the tx hash of a transfer with no tx_hash
+func (db *TransferDB) SetTxHash(txHash, hash string) error {
+	_, err := db.db.Exec(`
+	UPDATE t_transfers SET tx_hash = ? WHERE hash = ? AND tx_hash = ''
+	`, txHash, hash)
 
-// 		err := rows.Scan(&transfer.Hash, &transfer.TokenID, &transfer.CreatedAt, &transfer.From, &transfer.To, &value, &transfer.Data)
-// 		if err != nil {
-// 			return nil, err
-// 		}
+	return err
+}
 
-// 		transfer.Value = new(big.Int)
-// 		transfer.Value.SetString(value, 10)
+// TransferExists returns true if the transfer tx_hash exists in the db
+func (db *TransferDB) TransferExists(txHash string) (bool, error) {
+	var count int
+	row := db.db.QueryRow(`
+	SELECT COUNT(*) FROM t_transfers WHERE tx_hash = ?
+	`, txHash)
 
-// 		transfers = append(transfers, &transfer)
-// 	}
+	err := row.Scan(&count)
+	if err != nil {
+		return false, err
+	}
 
-// 	return transfers, nil
-// }
+	return count > 0, nil
+}
+
+// RemovePendingTransfer removes a pending transfer from the db
+func (db *TransferDB) RemovePendingTransfer(hash string) error {
+	_, err := db.db.Exec(`
+	DELETE FROM t_transfers WHERE hash = ? AND tx_hash = '' AND status = 'pending'
+	`, hash)
+
+	return err
+}
 
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated
 func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate indexer.SQLiteTime, limit, offset int) ([]*indexer.Transfer, int, error) {
@@ -285,6 +304,60 @@ func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate index
 		WHERE created_at >= ? AND token_id = ? AND from_to_addr LIKE ?
 		ORDER BY created_at DESC
 		`, fromDate, tokenId, likePattern)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var transfer indexer.Transfer
+		var value string
+
+		err := rows.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
+		if err != nil {
+			return nil, err
+		}
+
+		transfer.Value = new(big.Int)
+		transfer.Value.SetString(value, 10)
+
+		transfers = append(transfers, &transfer)
+	}
+
+	return transfers, nil
+}
+
+// GetPendingTransfers returns the transfers for a given from_addr or to_addr from a given date
+func (db *TransferDB) GetPendingTransfers(limit int) ([]*indexer.Transfer, error) {
+	fromDate := indexer.SQLiteTime(time.Now().UTC())
+
+	// get the total count of transfers for a from_to_addr
+	var total int
+	row := db.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM t_transfers
+		WHERE status = ? AND created_at <= ? AND tx_hash = ''
+		LIMIT ?
+		`, indexer.TransferStatusPending, fromDate, limit)
+
+	err := row.Scan(&total)
+	if err != nil {
+		return nil, err
+	}
+
+	transfers := []*indexer.Transfer{}
+
+	if total == 0 {
+		return transfers, nil
+	}
+
+	rows, err := db.db.Query(`
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
+		FROM t_transfers
+		WHERE status = ? AND created_at <= ? AND tx_hash = ''
+		ORDER BY created_at DESC
+		LIMIT ?
+		`, indexer.TransferStatusPending, fromDate, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -115,6 +116,7 @@ const (
 type signedBody struct {
 	Data     []byte       `json:"data"`
 	Encoding BodyEncoding `json:"encoding"`
+	Expiry   int64        `json:"expiry"`
 }
 
 // SignatureMiddleware is a middleware that checks the signature of the request against the request body
@@ -146,7 +148,7 @@ func SignatureMiddleware(next http.Handler) http.Handler {
 		}
 
 		// check signature
-		if !verifySignature(req.Data, addr, signature) {
+		if !verifySignature(req, addr, signature) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -167,9 +169,14 @@ func SignatureMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func verifySignature(data []byte, addr string, signature string) bool {
+func verifySignature(req signedBody, addr string, signature string) bool {
+	// verify if the signature has expired
+	if req.Expiry < time.Now().UTC().Unix() {
+		return false
+	}
+
 	// hash the request data
-	h := crypto.Keccak256Hash(data)
+	h := crypto.Keccak256Hash(req.Data)
 
 	// decode the signature
 	sig, err := hexutil.Decode(signature)

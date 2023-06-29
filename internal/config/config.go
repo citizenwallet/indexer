@@ -11,7 +11,9 @@ import (
 type Config struct {
 	RPCURL                string `env:"RPC_URL,default=http://localhost:8545"`
 	RPCWSURL              string `env:"RPC_WS_URL,default=ws://localhost:8545"`
-	AccountFactoryAddress string `env:"ERC4337_ACCOUNT_FACTORY"`
+	BundlerRPCURL         string `env:"ERC4337_RPC_URL,required"`
+	EntryPointAddress     string `env:"ERC4337_ENTRYPOINT,required"`
+	AccountFactoryAddress string `env:"ERC4337_ACCOUNT_FACTORY,required"`
 	APIKEY                string `env:"API_KEY,required"`
 }
 

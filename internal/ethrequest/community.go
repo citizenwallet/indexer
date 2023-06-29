@@ -1,6 +1,8 @@
 package ethrequest
 
 import (
+	"math/big"
+
 	"github.com/daobrussels/smartcontracts/pkg/contracts/simpleaccountfactory"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -8,11 +10,14 @@ import (
 type Community struct {
 	es *EthService
 
-	AccountFactoryAddr common.Address `json:"accountFactory"`
+	EntryPointAddr common.Address
+
+	AccountFactoryAddr common.Address
 	AccountFactory     *simpleaccountfactory.Simpleaccountfactory
 }
 
-func NewCommunity(es *EthService, accountFactoryAddr string) (*Community, error) {
+func NewCommunity(es *EthService, entryPointAddr, accountFactoryAddr string) (*Community, error) {
+	eaddr := common.HexToAddress(entryPointAddr)
 	addr := common.HexToAddress(accountFactoryAddr)
 
 	// instantiate account factory contract
@@ -23,9 +28,20 @@ func NewCommunity(es *EthService, accountFactoryAddr string) (*Community, error)
 
 	return &Community{
 		es:                 es,
+		EntryPointAddr:     eaddr,
 		AccountFactoryAddr: addr,
 		AccountFactory:     acc,
 	}, nil
+}
+
+// EntryPointNextNonce returns the next nonce for the entry point address
+func (c *Community) EntryPointNextNonce() (*big.Int, error) {
+	n, err := c.es.Client().NonceAt(c.es.Context(), c.EntryPointAddr, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return big.NewInt(int64(n)), nil
 }
 
 // GetAccount returns the account at the given address
@@ -34,7 +50,6 @@ func (c *Community) GetAccount(owner string) (*common.Address, error) {
 
 	acc, err := c.AccountFactory.GetAddress(nil, addr, common.Big0)
 	if err != nil {
-		println(err.Error())
 		return nil, err
 	}
 

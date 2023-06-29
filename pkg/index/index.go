@@ -1,6 +1,7 @@
 package index
 
 import (
+	"context"
 	"errors"
 	"log"
 	"math/big"
@@ -32,15 +33,23 @@ type Indexer struct {
 	chainID *big.Int
 	db      *db.DB
 	eth     *ethrequest.EthService
+
+	re *Reconciler
 }
 
-func New(rate int, chainID *big.Int, db *db.DB, eth *ethrequest.EthService) *Indexer {
+func New(rate int, chainID *big.Int, db *db.DB, eth *ethrequest.EthService, ctx context.Context, rpcUrl string) (*Indexer, error) {
+	re, err := NewReconciler(rate, chainID, db, ctx, rpcUrl)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Indexer{
 		rate:    rate,
 		chainID: chainID,
 		db:      db,
 		eth:     eth,
-	}
+		re:      re,
+	}, nil
 }
 
 // Start starts the indexer service
@@ -58,7 +67,16 @@ func (i *Indexer) Start() error {
 		return err
 	}
 
+	err = i.re.Process(evs)
+	if err != nil && err != ErrReconcilingRecoverable {
+		return err
+	}
+
 	return i.Process(evs, curr)
+}
+
+func (e *Indexer) Close() {
+	e.re.Close()
 }
 
 // Background starts an indexer service in the background
@@ -68,7 +86,7 @@ func (i *Indexer) Background(syncrate int) error {
 		if err != nil {
 			// check if the error is recoverable
 			if err == ErrIndexingRecoverable {
-				log.Default().Println("[background] recoverable error: ", err)
+				log.Default().Println("indexer [background] recoverable error: ", err)
 				// wait a bit
 				<-time.After(250 * time.Millisecond)
 				// skip the event
@@ -77,7 +95,7 @@ func (i *Indexer) Background(syncrate int) error {
 			return err
 		}
 
-		time.Sleep(time.Duration(syncrate) * time.Second)
+		<-time.After(time.Duration(syncrate) * time.Second)
 	}
 }
 
@@ -88,8 +106,6 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 		return nil
 	}
 
-	log.Default().Println("indexing ", len(evs), " events")
-
 	// iterate over events and index them
 	for _, ev := range evs {
 		err := i.Index(ev, curr)
@@ -99,7 +115,7 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 
 		// check if the error is recoverable
 		if err == ErrIndexingRecoverable {
-			log.Default().Println("[process] recoverable error: ", err)
+			log.Default().Println("indexer [process] recoverable error: ", err)
 			// wait a bit
 			<-time.After(250 * time.Millisecond)
 			// skip the event
@@ -107,8 +123,6 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 		}
 		return err
 	}
-
-	log.Default().Println("indexing done")
 
 	return nil
 }
@@ -231,15 +245,35 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			}
 
 			if len(txs) > 0 {
-				println("hashing for ", len(txs), " transfers ...")
-				err = i.generateIndexedHashes(txs)
-				if err != nil {
-					return err
+				// filter out existing transfers
+				newTxs := []*indexer.Transfer{}
+				for _, tx := range txs {
+					// check if the transfer already exists
+					exists, err := txdb.TransferExists(tx.TxHash)
+					if err != nil {
+						return err
+					}
+
+					if !exists {
+						// generate a hash
+						tx.GenerateHash(i.chainID.Int64())
+
+						newTxs = append(newTxs, tx)
+						continue
+					}
+
+					err = txdb.SetStatusFromTxHash(string(indexer.TransferStatusSuccess), tx.TxHash)
+					if err != nil {
+						return err
+					}
 				}
 
-				err = txdb.AddTransfers(txs)
-				if err != nil {
-					return err
+				if len(newTxs) > 0 {
+					// add the new transfers to the db
+					err = txdb.AddTransfers(newTxs)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -364,22 +398,4 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 	}
 
 	return txs, nil
-}
-
-func (i *Indexer) generateIndexedHashes(txs []*indexer.Transfer) error {
-
-	for _, tx := range txs {
-		println("fetching transaction by hash: ", tx.TxHash)
-		t, _, err := i.eth.TransactionByHash(common.HexToHash(tx.TxHash))
-		if err != nil {
-			return err
-		}
-
-		tx.Nonce = int64(t.Nonce())
-
-		tx.GenerateHash(i.chainID.Int64())
-		println("generated hash: ", tx.Hash)
-	}
-
-	return nil
 }

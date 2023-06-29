@@ -100,6 +100,7 @@ func (db *EventDB) GetEvents() ([]*indexer.Event, error) {
 	rows, err := db.db.Query(`
 	SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol
 	FROM t_events
+	ORDER BY created_at ASC
 	`)
 	if err != nil {
 		return nil, err

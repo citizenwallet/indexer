@@ -122,7 +122,7 @@ type signedBody struct {
 // SignatureMiddleware is a middleware that checks the signature of the request against the request body
 func SignatureMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(indexer.ProtectedPaths, r.URL.Path) && (r.Method == http.MethodGet || r.Method == http.MethodOptions) {
+		if !strings.Contains(indexer.ProtectedPaths, r.URL.Path) || (r.Method == http.MethodGet || r.Method == http.MethodOptions) {
 			next.ServeHTTP(w, r)
 			return
 		}

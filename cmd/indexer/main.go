@@ -71,7 +71,7 @@ func main() {
 
 	log.Default().Println("starting index service...")
 
-	i, err := index.New(*rate, chid, d, ethreq, ctx, conf.BundlerRPCURL)
+	i, err := index.New(*rate, chid, d, ethreq, ctx, conf.BundlerRPCURL, conf.BundlerOriginHeader)
 	if err != nil {
 		log.Fatal(err)
 	}

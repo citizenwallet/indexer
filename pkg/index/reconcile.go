@@ -26,8 +26,8 @@ type Reconciler struct {
 	bundler *bundler.Bundler
 }
 
-func NewReconciler(rate int, chainID *big.Int, db *db.DB, ctx context.Context, rpcUrl string) (*Reconciler, error) {
-	b, err := bundler.New(ctx, rpcUrl)
+func NewReconciler(rate int, chainID *big.Int, db *db.DB, ctx context.Context, rpcUrl, origin string) (*Reconciler, error) {
+	b, err := bundler.New(ctx, rpcUrl, origin)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +126,23 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 				continue
 			}
 
+			// check if it this tx_hash already exists
+			exists, err := txdb.TransferExists(r.TransactionHash)
+			if err != nil {
+				return err
+			}
+
+			if exists {
+				// set hash
+				err = txdb.SetHash(tx.Hash, r.TransactionHash)
+				if err != nil {
+					return err
+				}
+
+				continue
+			}
+
+			// set tx_hash
 			err = txdb.SetTxHash(r.TransactionHash, tx.Hash)
 			if err != nil {
 				return err

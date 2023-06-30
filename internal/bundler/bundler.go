@@ -15,11 +15,13 @@ type Bundler struct {
 	rpc *rpc.Client
 }
 
-func New(ctx context.Context, endpoint string) (*Bundler, error) {
+func New(ctx context.Context, endpoint, origin string) (*Bundler, error) {
 	rpc, err := rpc.Dial(endpoint)
 	if err != nil {
 		return nil, err
 	}
+
+	rpc.SetHeader("Origin", origin)
 
 	return &Bundler{ctx, rpc}, nil
 }

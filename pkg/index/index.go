@@ -37,8 +37,8 @@ type Indexer struct {
 	re *Reconciler
 }
 
-func New(rate int, chainID *big.Int, db *db.DB, eth *ethrequest.EthService, ctx context.Context, rpcUrl string) (*Indexer, error) {
-	re, err := NewReconciler(rate, chainID, db, ctx, rpcUrl)
+func New(rate int, chainID *big.Int, db *db.DB, eth *ethrequest.EthService, ctx context.Context, rpcUrl, origin string) (*Indexer, error) {
+	re, err := NewReconciler(rate, chainID, db, ctx, rpcUrl, origin)
 	if err != nil {
 		return nil, err
 	}

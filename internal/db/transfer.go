@@ -189,6 +189,15 @@ func (db *TransferDB) SetStatusFromTxHash(status, txhash string) error {
 	return err
 }
 
+// SetHash sets the tx hash of a transfer with no tx_hash
+func (db *TransferDB) SetHash(hash, txHash string) error {
+	_, err := db.db.Exec(`
+	UPDATE t_transfers SET hash = ? WHERE tx_hash = ?
+	`, hash, txHash)
+
+	return err
+}
+
 // SetTxHash sets the tx hash of a transfer with no tx_hash
 func (db *TransferDB) SetTxHash(txHash, hash string) error {
 	_, err := db.db.Exec(`

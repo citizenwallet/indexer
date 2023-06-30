@@ -14,6 +14,7 @@ type Config struct {
 	BundlerRPCURL         string `env:"ERC4337_RPC_URL,required"`
 	EntryPointAddress     string `env:"ERC4337_ENTRYPOINT,required"`
 	AccountFactoryAddress string `env:"ERC4337_ACCOUNT_FACTORY,required"`
+	BundlerOriginHeader   string `env:"ERC4337_ORIGIN_HEADER,required"`
 	APIKEY                string `env:"API_KEY,required"`
 }
 

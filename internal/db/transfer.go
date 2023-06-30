@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -162,7 +163,7 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 				status = excluded.status
 			`, t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
 		if err != nil {
-			return err
+			return dbtx.Rollback()
 		}
 	}
 
@@ -189,11 +190,42 @@ func (db *TransferDB) SetStatusFromTxHash(status, txhash string) error {
 	return err
 }
 
-// SetHash sets the tx hash of a transfer with no tx_hash
-func (db *TransferDB) SetHash(hash, txHash string) error {
-	_, err := db.db.Exec(`
-	UPDATE t_transfers SET hash = ? WHERE tx_hash = ?
-	`, hash, txHash)
+// ReconcileTxHash updates transfers to ensure that there are no duplicates
+func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
+	// check if there are multiple transfers with the same tx_hash
+	var count int
+	row := db.db.QueryRow(`
+	SELECT COUNT(*) FROM t_transfers WHERE tx_hash = ?
+	`, tx.TxHash)
+
+	err := row.Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		// should be impossible
+		return errors.New("no transfer with tx_hash")
+	}
+
+	// handle the scenario with multiple transfers with the same tx_hash
+
+	// we can assume that the reason there are multiple transfers with the same tx_hash
+	// is because one was inserted due tu indexing, meaning it is confirmed
+
+	// delete all transfers with a given tx_hash
+	_, err = db.db.Exec(`
+	DELETE FROM t_transfers WHERE tx_hash = ?
+	`, tx.TxHash)
+	if err != nil {
+		return err
+	}
+
+	// insert the confirmed transfer
+	_, err = db.db.Exec(`
+	INSERT OR REPLACE INTO t_transfers (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'success')
+	`, tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data)
 
 	return err
 }

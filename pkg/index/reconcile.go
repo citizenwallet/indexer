@@ -126,7 +126,9 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 				continue
 			}
 
-			// check if it this tx_hash already exists
+			tx.TxHash = r.TransactionHash
+
+			// check if this tx_hash already exists
 			exists, err := txdb.TransferExists(r.TransactionHash)
 			if err != nil {
 				return err
@@ -134,7 +136,7 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 
 			if exists {
 				// set hash
-				err = txdb.SetHash(tx.Hash, r.TransactionHash)
+				err = txdb.ReconcileTxHash(tx)
 				if err != nil {
 					return err
 				}

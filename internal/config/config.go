@@ -16,6 +16,7 @@ type Config struct {
 	AccountFactoryAddress string `env:"ERC4337_ACCOUNT_FACTORY,required"`
 	BundlerOriginHeader   string `env:"ERC4337_ORIGIN_HEADER,required"`
 	APIKEY                string `env:"API_KEY,required"`
+	SentryURL             string `env:"SENTRY_URL"`
 }
 
 func New(ctx context.Context, envpath string) (*Config, error) {

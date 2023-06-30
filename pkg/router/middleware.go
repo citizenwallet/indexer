@@ -119,14 +119,9 @@ type signedBody struct {
 	Expiry   int64        `json:"expiry"`
 }
 
-// SignatureMiddleware is a middleware that checks the signature of the request against the request body
-func SignatureMiddleware(next http.Handler) http.Handler {
+// withSignature is a middleware that checks the signature of the request against the request body
+func withSignature(h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(indexer.ProtectedPaths, r.URL.Path) || (r.Method == http.MethodGet || r.Method == http.MethodOptions) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		// check signature
 		signature := r.Header.Get(indexer.SignatureHeader)
 		if signature == "" {
@@ -164,7 +159,7 @@ func SignatureMiddleware(next http.Handler) http.Handler {
 
 		ctx := context.WithValue(r.Context(), indexer.ContextKeyAddress, addr)
 
-		next.ServeHTTP(w, r.WithContext(ctx))
+		h(w, r.WithContext(ctx))
 		return
 	})
 }

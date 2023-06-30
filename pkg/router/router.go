@@ -48,7 +48,6 @@ func (r *Router) Start(port int) error {
 	cr.Use(OptionsMiddleware)
 	cr.Use(HealthMiddleware)
 	cr.Use(a.AuthMiddleware)
-	cr.Use(SignatureMiddleware)
 	cr.Use(middleware.Compress(9))
 
 	// instantiate handlers
@@ -61,9 +60,9 @@ func (r *Router) Start(port int) error {
 			cr.Get("/{addr}", l.Get)
 			cr.Get("/{addr}/new", l.GetNew)
 
-			cr.Post("/{addr}", l.AddSending)
+			cr.Post("/{addr}", withSignature(l.AddSending))
 
-			cr.Patch("/{addr}/{hash}", l.SetStatus)
+			cr.Patch("/{addr}/{hash}", withSignature(l.SetStatus))
 		})
 	})
 

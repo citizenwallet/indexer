@@ -1,14 +1,14 @@
 package indexer
 
-import "context"
+import (
+	"context"
+)
 
 const (
 	// SignatureHeader is the header that contains the signature of the request
 	SignatureHeader = "X-Signature"
 	// AddressHeader is the header that contains the address of the sender
 	AddressHeader = "X-Address"
-
-	ProtectedPaths = "/logs/transfers"
 )
 
 type ContextKey string

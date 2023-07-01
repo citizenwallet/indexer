@@ -95,8 +95,8 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 			}
 		}
 
-		// get pending transfers
-		txs, err := txdb.GetPendingTransfers(r.rate)
+		// get processing transfers
+		txs, err := txdb.GetProcessingTransfers(r.rate)
 		if err != nil {
 			return err
 		}
@@ -105,8 +105,35 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 			continue
 		}
 
+		log.Default().Println("found ", len(txs), " logs that need to be reconciled...")
+
+		// go through sending transfers
 		for _, tx := range txs {
-			log.Default().Println("found ", len(txs), " logs that need to be reconciled...")
+			if tx.Status != indexer.TransferStatusSending {
+				continue
+			}
+
+			if time.Now().UTC().Before(tx.CreatedAt.Time().UTC().Add(30 * time.Second)) {
+				// give 30 seconds to submit before deleting
+				continue
+			}
+
+			// not normal, should not stay this long in sending status
+			log.Default().Println("cleaning up sending transfer: ", tx.Hash)
+
+			// remove the transaction from the db
+			err = txdb.RemoveSendingTransfer(tx.Hash)
+			if err != nil {
+				return err
+			}
+		}
+
+		// go through pending transfers
+		for _, tx := range txs {
+			if tx.Status != indexer.TransferStatusPending {
+				continue
+			}
+
 			r, err := r.bundler.GetUserOperationByHash(tx.Hash)
 			if err != nil && err.Error() != ErrInvalidUserOp.Error() {
 				// probably a network error
@@ -116,13 +143,18 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 				// probably an unsubmitted user op
 				log.Default().Println("user op not found: ", err.Error())
 
+				if time.Now().UTC().Before(tx.CreatedAt.Time().UTC().Add(30 * time.Second)) {
+					// give 30 seconds to submit before deleting
+					continue
+				}
+
+				log.Default().Println("cleaning up pending transfer: ", tx.Hash)
+
 				// remove the transaction from the db
-				// err = txdb.RemovePendingTransfer(tx.Hash)
-				// if err != nil {
-				// 	println("error removing pending transfer: ", err.Error())
-				// 	return err
-				// }
-				// println("removed pending transfer: ", tx.Hash)
+				err = txdb.RemovePendingTransfer(tx.Hash)
+				if err != nil {
+					return err
+				}
 				continue
 			}
 

@@ -254,6 +254,15 @@ func (db *TransferDB) TransferExists(txHash string) (bool, error) {
 	return count > 0, nil
 }
 
+// RemoveSendingTransfer removes a sending transfer from the db
+func (db *TransferDB) RemoveSendingTransfer(hash string) error {
+	_, err := db.db.Exec(`
+	DELETE FROM t_transfers WHERE hash = ? AND tx_hash = '' AND status = 'sending'
+	`, hash)
+
+	return err
+}
+
 // RemovePendingTransfer removes a pending transfer from the db
 func (db *TransferDB) RemovePendingTransfer(hash string) error {
 	_, err := db.db.Exec(`
@@ -368,8 +377,8 @@ func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate index
 	return transfers, nil
 }
 
-// GetPendingTransfers returns the transfers for a given from_addr or to_addr from a given date
-func (db *TransferDB) GetPendingTransfers(limit int) ([]*indexer.Transfer, error) {
+// GetProcessingTransfers returns the transfers for a given from_addr or to_addr from a given date
+func (db *TransferDB) GetProcessingTransfers(limit int) ([]*indexer.Transfer, error) {
 	fromDate := indexer.SQLiteTime(time.Now().UTC())
 
 	// get the total count of transfers for a from_to_addr
@@ -377,9 +386,9 @@ func (db *TransferDB) GetPendingTransfers(limit int) ([]*indexer.Transfer, error
 	row := db.db.QueryRow(`
 		SELECT COUNT(*)
 		FROM t_transfers
-		WHERE status = ? AND created_at <= ? AND tx_hash = ''
+		WHERE (status = ? OR status = ?) AND created_at <= ? AND tx_hash = ''
 		LIMIT ?
-		`, indexer.TransferStatusPending, fromDate, limit)
+		`, indexer.TransferStatusPending, indexer.TransferStatusSending, fromDate, limit)
 
 	err := row.Scan(&total)
 	if err != nil {
@@ -395,10 +404,10 @@ func (db *TransferDB) GetPendingTransfers(limit int) ([]*indexer.Transfer, error
 	rows, err := db.db.Query(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers
-		WHERE status = ? AND created_at <= ? AND tx_hash = ''
+		WHERE (status = ? OR status = ?) AND created_at <= ? AND tx_hash = ''
 		ORDER BY created_at DESC
 		LIMIT ?
-		`, indexer.TransferStatusPending, fromDate, limit)
+		`, indexer.TransferStatusPending, indexer.TransferStatusSending, fromDate, limit)
 	if err != nil {
 		return nil, err
 	}

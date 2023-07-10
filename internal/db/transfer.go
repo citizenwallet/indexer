@@ -326,7 +326,7 @@ func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate 
 }
 
 // GetNewTransfers returns the transfers for a given from_addr or to_addr from a given date
-func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate indexer.SQLiteTime) ([]*indexer.Transfer, error) {
+func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate indexer.SQLiteTime, limit int) ([]*indexer.Transfer, error) {
 	likePattern := fmt.Sprintf("%%%s%%", addr)
 
 	// get the total count of transfers for a from_to_addr
@@ -335,7 +335,8 @@ func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate index
 		SELECT COUNT(*)
 		FROM t_transfers
 		WHERE created_at >= ? AND token_id = ? AND from_to_addr LIKE ?
-		`, fromDate, tokenId, likePattern)
+		LIMIT ?
+		`, fromDate, tokenId, likePattern, limit)
 
 	err := row.Scan(&total)
 	if err != nil {
@@ -353,7 +354,8 @@ func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate index
 		FROM t_transfers
 		WHERE created_at >= ? AND token_id = ? AND from_to_addr LIKE ?
 		ORDER BY created_at DESC
-		`, fromDate, tokenId, likePattern)
+		LIMIT ?
+		`, fromDate, tokenId, likePattern, limit)
 	if err != nil {
 		return nil, err
 	}

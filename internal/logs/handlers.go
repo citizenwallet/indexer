@@ -103,6 +103,14 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 	}
 	fromDate := indexer.SQLiteTime(t.UTC())
 
+	// parse pagination params from url query
+	limitq := r.URL.Query().Get("limit")
+
+	limit, err := strconv.Atoi(limitq)
+	if err != nil {
+		limit = 10
+	}
+
 	tokenIdq := r.URL.Query().Get("tokenId")
 	tokenId, err := strconv.Atoi(tokenIdq)
 	if err != nil {
@@ -116,7 +124,7 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get logs from db
-	logs, err := tdb.GetNewTransfers(int64(tokenId), addr, fromDate)
+	logs, err := tdb.GetNewTransfers(int64(tokenId), addr, fromDate, limit)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

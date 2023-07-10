@@ -273,27 +273,9 @@ func (db *TransferDB) RemovePendingTransfer(hash string) error {
 }
 
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated
-func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate indexer.SQLiteTime, limit, offset int) ([]*indexer.Transfer, int, error) {
+func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate indexer.SQLiteTime, limit, offset int) ([]*indexer.Transfer, error) {
 	likePattern := fmt.Sprintf("%%%s%%", addr)
-
-	// get the total count of transfers for a from_to_addr
-	var total int
-	row := db.db.QueryRow(`
-		SELECT COUNT(*)
-		FROM t_transfers
-		WHERE created_at <= ? AND token_id = ? AND from_to_addr LIKE ?
-		`, maxDate, tokenId, likePattern)
-
-	err := row.Scan(&total)
-	if err != nil {
-		return nil, total, err
-	}
-
 	transfers := []*indexer.Transfer{}
-
-	if total == 0 {
-		return transfers, total, nil
-	}
 
 	rows, err := db.db.Query(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
@@ -303,7 +285,11 @@ func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate 
 		LIMIT ? OFFSET ?
 		`, maxDate, tokenId, likePattern, limit, offset)
 	if err != nil {
-		return nil, total, err
+		if err == sql.ErrNoRows {
+			return transfers, nil
+		}
+
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -313,7 +299,7 @@ func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate 
 
 		err := rows.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
 		if err != nil {
-			return nil, total, err
+			return nil, err
 		}
 
 		transfer.Value = new(big.Int)
@@ -322,32 +308,13 @@ func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate 
 		transfers = append(transfers, &transfer)
 	}
 
-	return transfers, total, nil
+	return transfers, nil
 }
 
 // GetNewTransfers returns the transfers for a given from_addr or to_addr from a given date
 func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate indexer.SQLiteTime, limit int) ([]*indexer.Transfer, error) {
 	likePattern := fmt.Sprintf("%%%s%%", addr)
-
-	// get the total count of transfers for a from_to_addr
-	var total int
-	row := db.db.QueryRow(`
-		SELECT COUNT(*)
-		FROM t_transfers
-		WHERE created_at >= ? AND token_id = ? AND from_to_addr LIKE ?
-		LIMIT ?
-		`, fromDate, tokenId, likePattern, limit)
-
-	err := row.Scan(&total)
-	if err != nil {
-		return nil, err
-	}
-
 	transfers := []*indexer.Transfer{}
-
-	if total == 0 {
-		return transfers, nil
-	}
 
 	rows, err := db.db.Query(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
@@ -357,6 +324,10 @@ func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate index
 		LIMIT ?
 		`, fromDate, tokenId, likePattern, limit)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return transfers, nil
+		}
+
 		return nil, err
 	}
 	defer rows.Close()
@@ -382,26 +353,7 @@ func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate index
 // GetProcessingTransfers returns the transfers for a given from_addr or to_addr from a given date
 func (db *TransferDB) GetProcessingTransfers(limit int) ([]*indexer.Transfer, error) {
 	fromDate := indexer.SQLiteTime(time.Now().UTC())
-
-	// get the total count of transfers for a from_to_addr
-	var total int
-	row := db.db.QueryRow(`
-		SELECT COUNT(*)
-		FROM t_transfers
-		WHERE (status = ? OR status = ?) AND created_at <= ? AND tx_hash = ''
-		LIMIT ?
-		`, indexer.TransferStatusPending, indexer.TransferStatusSending, fromDate, limit)
-
-	err := row.Scan(&total)
-	if err != nil {
-		return nil, err
-	}
-
 	transfers := []*indexer.Transfer{}
-
-	if total == 0 {
-		return transfers, nil
-	}
 
 	rows, err := db.db.Query(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
@@ -411,6 +363,10 @@ func (db *TransferDB) GetProcessingTransfers(limit int) ([]*indexer.Transfer, er
 		LIMIT ?
 		`, indexer.TransferStatusPending, indexer.TransferStatusSending, fromDate, limit)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return transfers, nil
+		}
+
 		return nil, err
 	}
 	defer rows.Close()

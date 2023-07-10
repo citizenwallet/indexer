@@ -75,11 +75,14 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get logs from db
-	logs, total, err := tdb.GetPaginatedTransfers(int64(tokenId), addr, maxDate, limit, offset)
+	logs, err := tdb.GetPaginatedTransfers(int64(tokenId), addr, maxDate, limit, offset)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	// TODO: remove legacy support
+	total := offset + 10
 
 	err = common.BodyMultiple(w, logs, common.Pagination{Limit: limit, Offset: offset, Total: total})
 	if err != nil {

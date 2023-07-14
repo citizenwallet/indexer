@@ -211,10 +211,23 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 
 			txs := []*indexer.Transfer{}
 
+			// store a map of blocks by block number
+			blks := map[int64]*types.Block{}
+
 			for _, log := range logs {
-				blk, err := i.eth.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
-				if err != nil {
-					return ErrIndexingRecoverable
+				// to reduce API consumption, cache blocks by number
+
+				// check if it was already fetched
+				blk, ok := blks[int64(log.BlockNumber)]
+				if !ok {
+					// was not fetched yet, fetch it
+					blk, err = i.eth.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
+					if err != nil {
+						return ErrIndexingRecoverable
+					}
+
+					// save in our map for later
+					blks[int64(log.BlockNumber)] = blk
 				}
 
 				blktime := time.UnixMilli(int64(blk.Time()) * 1000).UTC()

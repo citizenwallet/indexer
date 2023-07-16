@@ -103,11 +103,13 @@ Syncing is done by standards, querying is done by event types on contracts. ERC2
 
 ### Logs
 
+Fetch all logs before a given maxDate with a limit and offset.
+
 `[GET] /logs/transfers/{contract_address}/{address}?maxDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10&offset=0`
 
 URL params
 
-`{contract_address}`: the address of the token contract you would like to index.
+`{contract_address}`: the address of the token contract you would like to query.
 
 `{address}`: the address of the "to" or "from" from an event log.
 
@@ -119,7 +121,93 @@ Query params
 
 `offset`: for pagination, the row at which the query should start from. Default = 0.
 
-### Events
+### New Logs
+
+Fetch all new logs after a give fromDate with a limit
+
+`[GET] /logs/transfers/{contract_address}/{address}/new?maxDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10`
+
+URL params
+
+`{contract_address}`: the address of the token contract you would like to query.
+
+`{address}`: the address of the "to" or "from" from an event log.
+
+Query params
+
+`fromDate`: a url encoded date string in iso format (RFC3339). Default = now.
+
+`limit`: for pagination, the maximum amount of items that should be returned. Default = 10.
+
+### Protected routes
+
+To ensure the right people make the right requests, we use signed requests.
+
+Headers
+
+`X-Signature`: a base64 encoding of the entire request body.
+
+`X-Address`: the hex address of the key that was used to generate the signature.
+
+Body
+
+```
+{
+    "data": data, // base64 encoded data
+    "encoding": "base64", // how is the data encoded
+    "expiry": expiry,
+}
+```
+
+### Add a "sending" Log [Protected]
+
+Add a new log to the indexer of a transaction that was submitted but is not yet on chain.
+
+`[POST] /logs/transfers/{contract_address}/{address}`
+
+URL params
+
+`{contract_address}`: the address of the token contract you would like to query.
+
+`{address}`: the address of the "to" or "from" from an event log.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+Body
+
+```
+{
+    "data": data, // base64 encoded data
+    "encoding": "base64", // how is the data encoded
+    "expiry": expiry,
+}
+```
+
+Data
+
+`indexer.Transfer`
+
+### Set a "sending" Log to "pending" [Protected]
+
+Update an existing log to "pending" indicating that a user op was submitted.
+
+`[POST] /logs/transfers/{contract_address}/{address}/{hash}`
+
+URL params
+
+`{contract_address}`: the address of the token contract you would like to query.
+
+`{address}`: the address of the "to" or "from" from an event log.
+
+`{hash}`: the user op hash of this event log.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+### Events [Protected]
 
 `[POST] /events`
 

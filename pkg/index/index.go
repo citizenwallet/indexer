@@ -1,6 +1,7 @@
 package index
 
 import (
+	"context"
 	"errors"
 	"log"
 	"math/big"
@@ -32,15 +33,23 @@ type Indexer struct {
 	chainID *big.Int
 	db      *db.DB
 	eth     *ethrequest.EthService
+
+	re *Reconciler
 }
 
-func New(rate int, chainID *big.Int, db *db.DB, eth *ethrequest.EthService) *Indexer {
+func New(rate int, chainID *big.Int, db *db.DB, eth *ethrequest.EthService, ctx context.Context, rpcUrl, origin string) (*Indexer, error) {
+	re, err := NewReconciler(rate, chainID, db, ctx, rpcUrl, origin)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Indexer{
 		rate:    rate,
 		chainID: chainID,
 		db:      db,
 		eth:     eth,
-	}
+		re:      re,
+	}, nil
 }
 
 // Start starts the indexer service
@@ -58,7 +67,16 @@ func (i *Indexer) Start() error {
 		return err
 	}
 
+	err = i.re.Process(evs)
+	if err != nil && err != ErrReconcilingRecoverable {
+		return err
+	}
+
 	return i.Process(evs, curr)
+}
+
+func (e *Indexer) Close() {
+	e.re.Close()
 }
 
 // Background starts an indexer service in the background
@@ -68,7 +86,7 @@ func (i *Indexer) Background(syncrate int) error {
 		if err != nil {
 			// check if the error is recoverable
 			if err == ErrIndexingRecoverable {
-				log.Default().Println("[background] recoverable error: ", err)
+				log.Default().Println("indexer [background] recoverable error: ", err)
 				// wait a bit
 				<-time.After(250 * time.Millisecond)
 				// skip the event
@@ -77,7 +95,7 @@ func (i *Indexer) Background(syncrate int) error {
 			return err
 		}
 
-		time.Sleep(time.Duration(syncrate) * time.Second)
+		<-time.After(time.Duration(syncrate) * time.Second)
 	}
 }
 
@@ -88,8 +106,6 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 		return nil
 	}
 
-	log.Default().Println("indexing ", len(evs), " events")
-
 	// iterate over events and index them
 	for _, ev := range evs {
 		err := i.Index(ev, curr)
@@ -99,7 +115,7 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 
 		// check if the error is recoverable
 		if err == ErrIndexingRecoverable {
-			log.Default().Println("[process] recoverable error: ", err)
+			log.Default().Println("indexer [process] recoverable error: ", err)
 			// wait a bit
 			<-time.After(250 * time.Millisecond)
 			// skip the event
@@ -107,8 +123,6 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 		}
 		return err
 	}
-
-	log.Default().Println("indexing done")
 
 	return nil
 }
@@ -197,10 +211,23 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 
 			txs := []*indexer.Transfer{}
 
+			// store a map of blocks by block number
+			blks := map[int64]*types.Block{}
+
 			for _, log := range logs {
-				blk, err := i.eth.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
-				if err != nil {
-					return ErrIndexingRecoverable
+				// to reduce API consumption, cache blocks by number
+
+				// check if it was already fetched
+				blk, ok := blks[int64(log.BlockNumber)]
+				if !ok {
+					// was not fetched yet, fetch it
+					blk, err = i.eth.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
+					if err != nil {
+						return ErrIndexingRecoverable
+					}
+
+					// save in our map for later
+					blks[int64(log.BlockNumber)] = blk
 				}
 
 				blktime := time.UnixMilli(int64(blk.Time()) * 1000).UTC()
@@ -231,9 +258,35 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			}
 
 			if len(txs) > 0 {
-				err = txdb.AddTransfers(txs)
-				if err != nil {
-					return err
+				// filter out existing transfers
+				newTxs := []*indexer.Transfer{}
+				for _, tx := range txs {
+					// check if the transfer already exists
+					exists, err := txdb.TransferExists(tx.TxHash)
+					if err != nil {
+						return err
+					}
+
+					if !exists {
+						// generate a hash
+						tx.GenerateHash(i.chainID.Int64())
+
+						newTxs = append(newTxs, tx)
+						continue
+					}
+
+					err = txdb.SetStatusFromTxHash(string(indexer.TransferStatusSuccess), tx.TxHash)
+					if err != nil {
+						return err
+					}
+				}
+
+				if len(newTxs) > 0 {
+					// add the new transfers to the db
+					err = txdb.AddTransfers(newTxs)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -269,12 +322,13 @@ func getERC20Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexe
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
 	return &indexer.Transfer{
-		Hash:      log.TxHash.Hex(),
+		TxHash:    log.TxHash.Hex(),
 		TokenID:   0,
 		CreatedAt: indexer.SQLiteTime(blktime),
 		From:      trsf.From.Hex(),
 		To:        trsf.To.Hex(),
 		Value:     trsf.Value,
+		Status:    indexer.TransferStatusSuccess,
 	}, nil
 }
 
@@ -290,12 +344,13 @@ func getERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*index
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
 	return &indexer.Transfer{
-		Hash:      log.TxHash.Hex(),
+		TxHash:    log.TxHash.Hex(),
 		TokenID:   trsf.TokenId.Int64(),
 		CreatedAt: indexer.SQLiteTime(blktime),
 		From:      trsf.From.Hex(),
 		To:        trsf.To.Hex(),
 		Value:     common.Big1,
+		Status:    indexer.TransferStatusSuccess,
 	}, nil
 }
 
@@ -317,12 +372,13 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 		trsf.To = common.HexToAddress(log.Topics[3].Hex())
 
 		txs = append(txs, &indexer.Transfer{
-			Hash:      log.TxHash.Hex(),
+			TxHash:    log.TxHash.Hex(),
 			TokenID:   trsf.Id.Int64(),
 			CreatedAt: indexer.SQLiteTime(blktime),
 			From:      trsf.From.Hex(),
 			To:        trsf.To.Hex(),
 			Value:     trsf.Value,
+			Status:    indexer.TransferStatusSuccess,
 		})
 	case crypto.Keccak256Hash([]byte(sc.ERC1155TransferBatch)).Hex():
 		var trsf erc1155.Erc1155TransferBatch
@@ -341,12 +397,13 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 
 		for i, id := range trsf.Ids {
 			txs = append(txs, &indexer.Transfer{
-				Hash:      log.TxHash.Hex(),
+				TxHash:    log.TxHash.Hex(),
 				TokenID:   id.Int64(),
 				CreatedAt: indexer.SQLiteTime(blktime),
 				From:      trsf.From.Hex(),
 				To:        trsf.To.Hex(),
 				Value:     trsf.Values[i],
+				Status:    indexer.TransferStatusSuccess,
 			})
 		}
 	default:

@@ -4,12 +4,14 @@ import (
 	"context"
 	"flag"
 	"log"
+	"time"
 
 	"github.com/citizenwallet/indexer/internal/config"
 	"github.com/citizenwallet/indexer/internal/db"
 	"github.com/citizenwallet/indexer/internal/ethrequest"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/router"
+	"github.com/getsentry/sentry-go"
 )
 
 func main() {
@@ -32,6 +34,21 @@ func main() {
 	conf, err := config.New(ctx, *env)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if conf.SentryURL != "" && conf.SentryURL != "x" {
+		err = sentry.Init(sentry.ClientOptions{
+			Dsn: conf.SentryURL,
+			// Set TracesSampleRate to 1.0 to capture 100%
+			// of transactions for performance monitoring.
+			// We recommend adjusting this value in production,
+			TracesSampleRate: 1.0,
+		})
+		if err != nil {
+			log.Fatalf("sentry.Init: %s", err)
+		}
+		// Flush buffered events before the program terminates.
+		defer sentry.Flush(2 * time.Second)
 	}
 
 	log.Default().Println("connecting to rpc...")
@@ -71,7 +88,11 @@ func main() {
 
 	log.Default().Println("starting index service...")
 
-	i := index.New(*rate, chid, d, ethreq)
+	i, err := index.New(*rate, chid, d, ethreq, ctx, conf.BundlerRPCURL, conf.BundlerOriginHeader)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer i.Close()
 
 	go func() {
 		quitAck <- i.Background(*sync)
@@ -79,7 +100,7 @@ func main() {
 
 	log.Default().Println("starting api service...")
 
-	api := router.NewServer(chid, conf.APIKEY, ethreq, d)
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, ethreq, d)
 
 	go func() {
 		quitAck <- api.Start(*port)

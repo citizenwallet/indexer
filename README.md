@@ -43,6 +43,10 @@ This will build for the current platform you are on. It's possible to cross-comp
 
 `go build -o indexer ./cmd/indexer/main.go`
 
+Linux cross-compilation
+
+`CC=x86_64-linux-musl-gcc CXX=x86_64-linux-musl-g++ GOARCH=amd64 GOOS=linux CGO_ENABLED=1 go build -ldflags "-linkmode external -extldflags -static" -o indexer ./cmd/indexer/main.go`
+
 Make it executable
 
 `chmod +x indexer`

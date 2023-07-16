@@ -10,6 +10,7 @@ import (
 	"github.com/citizenwallet/indexer/internal/ethrequest"
 	"github.com/citizenwallet/indexer/internal/events"
 	"github.com/citizenwallet/indexer/internal/logs"
+	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -19,17 +20,17 @@ type Router struct {
 	apiKey      string
 	epAddr      string
 	accFactAddr string
-	es          *ethrequest.EthService
+	evm         index.EVMRequester
 	db          *db.DB
 }
 
-func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr string, es *ethrequest.EthService, db *db.DB) *Router {
+func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr string, evm index.EVMRequester, db *db.DB) *Router {
 	return &Router{
 		chainId,
 		apiKey,
 		epAddr,
 		accFactAddr,
-		es,
+		evm,
 		db,
 	}
 }
@@ -39,7 +40,7 @@ func (r *Router) Start(port int) error {
 	cr := chi.NewRouter()
 
 	a := auth.New(r.apiKey)
-	comm, err := ethrequest.NewCommunity(r.es, r.epAddr, r.accFactAddr)
+	comm, err := ethrequest.NewCommunity(r.evm, r.epAddr, r.accFactAddr)
 	if err != nil {
 		return err
 	}
@@ -51,7 +52,7 @@ func (r *Router) Start(port int) error {
 	cr.Use(middleware.Compress(9))
 
 	// instantiate handlers
-	l := logs.NewService(r.chainId, r.db, r.es, comm)
+	l := logs.NewService(r.chainId, r.db, comm)
 	ev := events.NewService(r.db)
 
 	// configure routes

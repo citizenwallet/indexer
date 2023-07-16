@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/citizenwallet/indexer/internal/db"
-	"github.com/citizenwallet/indexer/internal/ethrequest"
 	"github.com/citizenwallet/indexer/internal/sc"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc1155"
@@ -20,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type ErrIndexing error
@@ -28,16 +28,35 @@ var (
 	ErrIndexingRecoverable ErrIndexing = errors.New("error indexing recoverable") // an error occurred while indexing but it is not fatal
 )
 
+type EVMType string
+
+const (
+	EVMTypeEthereum EVMType = "ethereum"
+	EVMTypeOptimism EVMType = "optimism"
+)
+
+type EVMRequester interface {
+	Context() context.Context
+	Client() *ethclient.Client
+
+	ChainID() (*big.Int, error)
+	LatestBlock() (*types.Block, error)
+	FilterLogs(q ethereum.FilterQuery) ([]types.Log, error)
+	BlockByNumber(number *big.Int) (*types.Block, error)
+
+	Close()
+}
+
 type Indexer struct {
 	rate    int
 	chainID *big.Int
 	db      *db.DB
-	eth     *ethrequest.EthService
+	evm     EVMRequester
 
 	re *Reconciler
 }
 
-func New(rate int, chainID *big.Int, db *db.DB, eth *ethrequest.EthService, ctx context.Context, rpcUrl, origin string) (*Indexer, error) {
+func New(rate int, chainID *big.Int, db *db.DB, evm EVMRequester, ctx context.Context, rpcUrl, origin string) (*Indexer, error) {
 	re, err := NewReconciler(rate, chainID, db, ctx, rpcUrl, origin)
 	if err != nil {
 		return nil, err
@@ -47,7 +66,7 @@ func New(rate int, chainID *big.Int, db *db.DB, eth *ethrequest.EthService, ctx 
 		rate:    rate,
 		chainID: chainID,
 		db:      db,
-		eth:     eth,
+		evm:     evm,
 		re:      re,
 	}, nil
 }
@@ -55,8 +74,9 @@ func New(rate int, chainID *big.Int, db *db.DB, eth *ethrequest.EthService, ctx 
 // Start starts the indexer service
 func (i *Indexer) Start() error {
 	// get the latest block
-	latestBlock, err := i.eth.LatestBlock()
+	latestBlock, err := i.evm.LatestBlock()
 	if err != nil {
+		println("i.eth.LatestBlock: ", err.Error())
 		return ErrIndexingRecoverable
 	}
 	curr := latestBlock.Number()
@@ -201,8 +221,9 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			Topics:    topics,
 		}
 
-		logs, err := i.eth.FilterLogs(query)
+		logs, err := i.evm.FilterLogs(query)
 		if err != nil {
+			println("logs, err := i.evm.FilterLogs(query): ", err)
 			return ErrIndexingRecoverable
 		}
 
@@ -221,8 +242,9 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 				blk, ok := blks[int64(log.BlockNumber)]
 				if !ok {
 					// was not fetched yet, fetch it
-					blk, err = i.eth.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
+					blk, err = i.evm.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
 					if err != nil {
+						print("blk, err = i.evm: ", err)
 						return ErrIndexingRecoverable
 					}
 

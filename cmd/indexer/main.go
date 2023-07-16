@@ -9,6 +9,7 @@ import (
 	"github.com/citizenwallet/indexer/internal/config"
 	"github.com/citizenwallet/indexer/internal/db"
 	"github.com/citizenwallet/indexer/internal/ethrequest"
+	"github.com/citizenwallet/indexer/internal/oprequest"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/router"
 	"github.com/getsentry/sentry-go"
@@ -26,6 +27,8 @@ func main() {
 	ws := flag.Bool("ws", false, "enable websocket")
 
 	rate := flag.Int("rate", 99, "rate to sync (default: 99)")
+
+	evmtype := flag.String("evm", string(index.EVMTypeEthereum), "which evm to use (default: ethereum)")
 
 	flag.Parse()
 
@@ -61,15 +64,27 @@ func main() {
 		log.Default().Println("running in standard http mode...")
 	}
 
-	ethreq, err := ethrequest.NewEthService(ctx, rpcUrl)
-	if err != nil {
-		log.Fatal(err)
+	var evm index.EVMRequester
+	switch index.EVMType(*evmtype) {
+	case index.EVMTypeEthereum:
+		evm, err = ethrequest.NewEthService(ctx, rpcUrl)
+		if err != nil {
+			log.Fatal(err)
+		}
+	case index.EVMTypeOptimism:
+		evm, err = oprequest.NewEthService(ctx, rpcUrl)
+		if err != nil {
+			log.Fatal(err)
+		}
+	default:
+		log.Fatal("unsupported evm type (must be one of: ethereum, optimism))")
 	}
-	defer ethreq.Close()
+
+	defer evm.Close()
 
 	log.Default().Println("fetching chain id...")
 
-	chid, err := ethreq.ChainID()
+	chid, err := evm.ChainID()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -88,7 +103,7 @@ func main() {
 
 	log.Default().Println("starting index service...")
 
-	i, err := index.New(*rate, chid, d, ethreq, ctx, conf.BundlerRPCURL, conf.BundlerOriginHeader)
+	i, err := index.New(*rate, chid, d, evm, ctx, conf.BundlerRPCURL, conf.BundlerOriginHeader)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -100,7 +115,7 @@ func main() {
 
 	log.Default().Println("starting api service...")
 
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, ethreq, d)
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, evm, d)
 
 	go func() {
 		quitAck <- api.Start(*port)

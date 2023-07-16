@@ -18,16 +18,14 @@ import (
 type Service struct {
 	chainID *big.Int
 	db      *db.DB
-	eth     *ethrequest.EthService
 
 	comm *ethrequest.Community
 }
 
-func NewService(chainID *big.Int, db *db.DB, eth *ethrequest.EthService, comm *ethrequest.Community) *Service {
+func NewService(chainID *big.Int, db *db.DB, comm *ethrequest.Community) *Service {
 	return &Service{
 		chainID: chainID,
 		db:      db,
-		eth:     eth,
 		comm:    comm,
 	}
 }

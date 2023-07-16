@@ -34,7 +34,7 @@ func NewService(chainID *big.Int, db *db.DB, eth *ethrequest.EthService, comm *e
 
 func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contractAddr")
+	contractAddr := chi.URLParam(r, "contract_address")
 
 	// parse address from url params
 	addr := chi.URLParam(r, "addr")
@@ -92,7 +92,7 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contractAddr")
+	contractAddr := chi.URLParam(r, "contract_address")
 
 	// parse address from url params
 	addr := chi.URLParam(r, "addr")
@@ -141,7 +141,7 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) AddSending(w http.ResponseWriter, r *http.Request) {
 	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contractAddr")
+	contractAddr := chi.URLParam(r, "contract_address")
 
 	// parse address from url params
 	accaddr := chi.URLParam(r, "addr")
@@ -205,7 +205,7 @@ type setStatusRequest struct {
 
 func (s *Service) SetStatus(w http.ResponseWriter, r *http.Request) {
 	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contractAddr")
+	contractAddr := chi.URLParam(r, "contract_address")
 
 	// parse address from url params
 	accaddr := chi.URLParam(r, "addr")

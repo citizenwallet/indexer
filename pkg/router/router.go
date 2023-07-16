@@ -56,7 +56,7 @@ func (r *Router) Start(port int) error {
 
 	// configure routes
 	cr.Route("/logs/transfers", func(cr chi.Router) {
-		cr.Route("/{contractAddr}", func(cr chi.Router) {
+		cr.Route("/{contract_address}", func(cr chi.Router) {
 			cr.Get("/{addr}", l.Get)
 			cr.Get("/{addr}/new", l.GetNew)
 

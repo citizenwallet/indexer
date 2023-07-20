@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/citizenwallet/indexer/internal/config"
-	"github.com/citizenwallet/indexer/internal/db"
-	"github.com/citizenwallet/indexer/internal/ethrequest"
-	"github.com/citizenwallet/indexer/internal/oprequest"
+	"github.com/citizenwallet/indexer/internal/services/bucket"
+	"github.com/citizenwallet/indexer/internal/services/db"
+	"github.com/citizenwallet/indexer/internal/services/ethrequest"
+	"github.com/citizenwallet/indexer/internal/services/oprequest"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/router"
 	"github.com/getsentry/sentry-go"
@@ -115,7 +116,9 @@ func main() {
 
 	log.Default().Println("starting api service...")
 
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, evm, d)
+	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret, conf.IpfsURL)
+
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, evm, d, bu)
 
 	go func() {
 		quitAck <- api.Start(*port)

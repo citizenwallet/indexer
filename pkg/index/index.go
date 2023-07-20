@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/citizenwallet/indexer/internal/db"
 	"github.com/citizenwallet/indexer/internal/sc"
+	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc1155"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc20"

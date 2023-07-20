@@ -7,8 +7,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/citizenwallet/indexer/internal/bundler"
-	"github.com/citizenwallet/indexer/internal/db"
+	"github.com/citizenwallet/indexer/internal/services/bundler"
+	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 

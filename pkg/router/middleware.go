@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -134,6 +135,7 @@ func withSignature(h http.HandlerFunc) http.HandlerFunc {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		defer r.Body.Close()
 
 		// get address
 		addr := r.Header.Get(indexer.AddressHeader)
@@ -148,14 +150,58 @@ func withSignature(h http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		err := r.Body.Close()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+		r.Body = io.NopCloser(strings.NewReader(string(req.Data)))
+		r.ContentLength = int64(len(req.Data))
+
+		ctx := context.WithValue(r.Context(), indexer.ContextKeyAddress, addr)
+
+		h(w, r.WithContext(ctx))
+		return
+	})
+}
+
+// withMultiPartSignature is a middleware that checks the signature of the request against a multi-part request body
+func withMultiPartSignature(h http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// check signature
+		signature := r.Header.Get(indexer.SignatureHeader)
+		if signature == "" {
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		r.Body = io.NopCloser(strings.NewReader(string(req.Data)))
-		r.ContentLength = int64(len(req.Data))
+		strbody := r.FormValue("body")
+		if strbody == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		body, err := base64.StdEncoding.DecodeString(strbody)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var req signedBody
+		if err := json.Unmarshal(body, &req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// get address
+		addr := r.Header.Get(indexer.AddressHeader)
+		if addr == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// check signature
+		if !verifySignature(req, addr, signature) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		r.MultipartForm.Value["body"] = []string{string(body)}
 
 		ctx := context.WithValue(r.Context(), indexer.ContextKeyAddress, addr)
 

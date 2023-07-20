@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/citizenwallet/indexer/internal/db"
+	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 

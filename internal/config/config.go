@@ -17,6 +17,10 @@ type Config struct {
 	BundlerOriginHeader   string `env:"ERC4337_ORIGIN_HEADER,required"`
 	APIKEY                string `env:"API_KEY,required"`
 	SentryURL             string `env:"SENTRY_URL"`
+	PinataBaseURL         string `env:"PINATA_BASE_URL"`
+	PinataAPIKey          string `env:"PINATA_API_KEY"`
+	PinataAPISecret       string `env:"PINATA_API_SECRET"`
+	IpfsURL               string `env:"IPFS_URL"`
 }
 
 func New(ctx context.Context, envpath string) (*Config, error) {

@@ -6,10 +6,12 @@ import (
 	"net/http"
 
 	"github.com/citizenwallet/indexer/internal/auth"
-	"github.com/citizenwallet/indexer/internal/db"
-	"github.com/citizenwallet/indexer/internal/ethrequest"
 	"github.com/citizenwallet/indexer/internal/events"
+	"github.com/citizenwallet/indexer/internal/files"
 	"github.com/citizenwallet/indexer/internal/logs"
+	"github.com/citizenwallet/indexer/internal/services/bucket"
+	"github.com/citizenwallet/indexer/internal/services/db"
+	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -22,9 +24,10 @@ type Router struct {
 	accFactAddr string
 	evm         index.EVMRequester
 	db          *db.DB
+	b           *bucket.Bucket
 }
 
-func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr string, evm index.EVMRequester, db *db.DB) *Router {
+func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr string, evm index.EVMRequester, db *db.DB, b *bucket.Bucket) *Router {
 	return &Router{
 		chainId,
 		apiKey,
@@ -32,6 +35,7 @@ func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr string, evm 
 		accFactAddr,
 		evm,
 		db,
+		b,
 	}
 }
 
@@ -54,6 +58,7 @@ func (r *Router) Start(port int) error {
 	// instantiate handlers
 	l := logs.NewService(r.chainId, r.db, comm)
 	ev := events.NewService(r.db)
+	f := files.NewService(r.b, comm)
 
 	// configure routes
 	cr.Route("/logs/transfers", func(cr chi.Router) {
@@ -69,6 +74,11 @@ func (r *Router) Start(port int) error {
 
 	cr.Route("/events", func(cr chi.Router) {
 		cr.Post("/", ev.AddEvent)
+	})
+
+	cr.Route("/files", func(cr chi.Router) {
+		cr.Post("/pin/{addr}", withMultiPartSignature(f.PinProfile))
+		cr.Delete("/unpin/{addr}/{hash}", withSignature(f.Unpin))
 	})
 
 	// start the server

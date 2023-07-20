@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/citizenwallet/indexer/internal/common"
-	"github.com/citizenwallet/indexer/internal/db"
-	"github.com/citizenwallet/indexer/internal/ethrequest"
+	"github.com/citizenwallet/indexer/internal/services/db"
+	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/go-chi/chi/v5"
 )

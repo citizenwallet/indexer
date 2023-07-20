@@ -83,6 +83,11 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !common.IsSameHexAddress(acc.Hex(), profile.Address) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	// pin image to ipfs
 	uri, err := s.b.PinFileToIPFS(r.Context(), si.Big, "big.jpg")
 	if err != nil {

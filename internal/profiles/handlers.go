@@ -1,4 +1,4 @@
-package files
+package profiles
 
 import (
 	"encoding/json"
@@ -57,7 +57,7 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, _, err := r.FormFile("image")
+	file, _, err := r.FormFile("file")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -71,7 +71,7 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	strbody := r.FormValue("body")
+	strbody := r.MultipartForm.Value["body"][0]
 	if strbody == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -83,7 +83,7 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !common.IsSameHexAddress(acc.Hex(), profile.Address) {
+	if !common.IsSameHexAddress(accaddr, profile.Account) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -157,7 +157,12 @@ func (s *Service) Unpin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := chi.URLParam(r, "hash")
+	// get the hash from the profile contract, makes sure that users can only delete their own profile
+	hash, err := s.comm.Profile.Get(nil, *acc)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 
 	err = s.b.Unpin(r.Context(), hash)
 	if err != nil {

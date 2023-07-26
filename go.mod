@@ -3,7 +3,7 @@ module github.com/citizenwallet/indexer
 go 1.20
 
 require (
-	github.com/citizenwallet/smartcontracts v0.0.47
+	github.com/citizenwallet/smartcontracts v0.0.50
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/ethereum-optimism/optimism v1.0.9
 	github.com/ethereum/go-ethereum v1.11.6

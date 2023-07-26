@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 )
@@ -25,15 +26,13 @@ type Bucket struct {
 	BaseURL   string
 	APIKey    string
 	APISecret string
-	IpfsURL   string
 }
 
-func NewBucket(baseURL, apiKey, apiSecret, ipfsURL string) *Bucket {
+func NewBucket(baseURL, apiKey, apiSecret string) *Bucket {
 	return &Bucket{
 		BaseURL:   baseURL,
 		APIKey:    apiKey,
 		APISecret: apiSecret,
-		IpfsURL:   ipfsURL,
 	}
 }
 
@@ -63,7 +62,7 @@ func (b *Bucket) PinJSONToIPFS(ctx context.Context, data []byte) (string, error)
 		return "", errors.New("error pinning to ipfs")
 	}
 
-	return b.IpfsURL + "/" + pinResp.IpfsHash, nil
+	return pinResp.IpfsHash, nil
 }
 
 func (b *Bucket) PinFileToIPFS(ctx context.Context, file []byte, name string) (string, error) {
@@ -109,7 +108,7 @@ func (b *Bucket) PinFileToIPFS(ctx context.Context, file []byte, name string) (s
 		return "", errors.New("error unpinning from ipfs")
 	}
 
-	return b.IpfsURL + "/" + pinResp.IpfsHash, nil
+	return fmt.Sprintf("ipfs://%s", pinResp.IpfsHash), nil
 }
 
 func (b *Bucket) Unpin(ctx context.Context, hash string) error {

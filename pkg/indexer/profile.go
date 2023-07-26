@@ -1,7 +1,8 @@
 package indexer
 
 type Profile struct {
-	Address     string `json:"address"`
+	Account     string `json:"account"`
+	Username    string `json:"username"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Image       string `json:"image"`

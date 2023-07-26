@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -170,20 +169,10 @@ func withMultiPartSignature(h http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		strbody := r.FormValue("body")
-		if strbody == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		body, err := base64.StdEncoding.DecodeString(strbody)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
+		body := r.FormValue("body")
 
 		var req signedBody
-		if err := json.Unmarshal(body, &req); err != nil {
+		if err := json.Unmarshal([]byte(body), &req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -201,7 +190,7 @@ func withMultiPartSignature(h http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		r.MultipartForm.Value["body"] = []string{string(body)}
+		r.MultipartForm.Value["body"] = []string{string(req.Data)}
 
 		ctx := context.WithValue(r.Context(), indexer.ContextKeyAddress, addr)
 

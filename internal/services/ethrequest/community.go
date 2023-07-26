@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	"github.com/citizenwallet/indexer/pkg/index"
+	"github.com/citizenwallet/smartcontracts/pkg/contracts/profile"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/simpleaccountfactory"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -15,14 +16,24 @@ type Community struct {
 
 	AccountFactoryAddr common.Address
 	AccountFactory     *simpleaccountfactory.Simpleaccountfactory
+
+	ProfileAddr common.Address
+	Profile     *profile.Profile
 }
 
-func NewCommunity(evm index.EVMRequester, entryPointAddr, accountFactoryAddr string) (*Community, error) {
+func NewCommunity(evm index.EVMRequester, entryPointAddr, accountFactoryAddr, profileAddr string) (*Community, error) {
 	eaddr := common.HexToAddress(entryPointAddr)
 	addr := common.HexToAddress(accountFactoryAddr)
+	prfaddr := common.HexToAddress(profileAddr)
 
 	// instantiate account factory contract
 	acc, err := simpleaccountfactory.NewSimpleaccountfactory(addr, evm.Client())
+	if err != nil {
+		return nil, err
+	}
+
+	// instantiate profile contract
+	prf, err := profile.NewProfile(prfaddr, evm.Client())
 	if err != nil {
 		return nil, err
 	}
@@ -32,6 +43,8 @@ func NewCommunity(evm index.EVMRequester, entryPointAddr, accountFactoryAddr str
 		EntryPointAddr:     eaddr,
 		AccountFactoryAddr: addr,
 		AccountFactory:     acc,
+		ProfileAddr:        prfaddr,
+		Profile:            prf,
 	}, nil
 }
 

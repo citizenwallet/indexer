@@ -7,8 +7,8 @@ import (
 
 	"github.com/citizenwallet/indexer/internal/auth"
 	"github.com/citizenwallet/indexer/internal/events"
-	"github.com/citizenwallet/indexer/internal/files"
 	"github.com/citizenwallet/indexer/internal/logs"
+	"github.com/citizenwallet/indexer/internal/profiles"
 	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
@@ -22,17 +22,19 @@ type Router struct {
 	apiKey      string
 	epAddr      string
 	accFactAddr string
+	prfAddr     string
 	evm         index.EVMRequester
 	db          *db.DB
 	b           *bucket.Bucket
 }
 
-func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr string, evm index.EVMRequester, db *db.DB, b *bucket.Bucket) *Router {
+func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm index.EVMRequester, db *db.DB, b *bucket.Bucket) *Router {
 	return &Router{
 		chainId,
 		apiKey,
 		epAddr,
 		accFactAddr,
+		prfAddr,
 		evm,
 		db,
 		b,
@@ -44,7 +46,7 @@ func (r *Router) Start(port int) error {
 	cr := chi.NewRouter()
 
 	a := auth.New(r.apiKey)
-	comm, err := ethrequest.NewCommunity(r.evm, r.epAddr, r.accFactAddr)
+	comm, err := ethrequest.NewCommunity(r.evm, r.epAddr, r.accFactAddr, r.prfAddr)
 	if err != nil {
 		return err
 	}
@@ -58,7 +60,7 @@ func (r *Router) Start(port int) error {
 	// instantiate handlers
 	l := logs.NewService(r.chainId, r.db, comm)
 	ev := events.NewService(r.db)
-	f := files.NewService(r.b, comm)
+	pr := profiles.NewService(r.b, comm)
 
 	// configure routes
 	cr.Route("/logs/transfers", func(cr chi.Router) {
@@ -76,9 +78,9 @@ func (r *Router) Start(port int) error {
 		cr.Post("/", ev.AddEvent)
 	})
 
-	cr.Route("/files", func(cr chi.Router) {
-		cr.Post("/pin/{addr}", withMultiPartSignature(f.PinProfile))
-		cr.Delete("/unpin/{addr}/{hash}", withSignature(f.Unpin))
+	cr.Route("/profiles", func(cr chi.Router) {
+		cr.Put("/{addr}", withMultiPartSignature(pr.PinProfile))
+		cr.Delete("/{addr}", withSignature(pr.Unpin))
 	})
 
 	// start the server

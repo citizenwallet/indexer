@@ -116,9 +116,9 @@ func main() {
 
 	log.Default().Println("starting api service...")
 
-	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret, conf.IpfsURL)
+	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret)
 
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, evm, d, bu)
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, bu)
 
 	go func() {
 		quitAck <- api.Start(*port)

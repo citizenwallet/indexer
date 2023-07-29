@@ -79,7 +79,8 @@ func (r *Router) Start(port int) error {
 	})
 
 	cr.Route("/profiles", func(cr chi.Router) {
-		cr.Put("/{addr}", withMultiPartSignature(pr.PinProfile))
+		cr.Put("/{addr}", withMultiPartSignature(pr.PinMultiPartProfile))
+		cr.Patch("/{addr}", withSignature(pr.PinProfile))
 		cr.Delete("/{addr}", withSignature(pr.Unpin))
 	})
 

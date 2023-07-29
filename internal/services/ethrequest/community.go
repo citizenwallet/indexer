@@ -69,3 +69,15 @@ func (c *Community) GetAccount(owner string) (*common.Address, error) {
 
 	return &acc, nil
 }
+
+// GetAccount returns the profile for a given address
+func (c *Community) GetProfile(owner string) (string, error) {
+	addr := common.HexToAddress(owner)
+
+	prf, err := c.Profile.Get(nil, addr)
+	if err != nil {
+		return "", err
+	}
+
+	return prf, nil
+}

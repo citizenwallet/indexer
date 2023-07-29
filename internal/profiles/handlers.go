@@ -29,6 +29,74 @@ type pinResponse struct {
 
 // PinProfile handler for pinning profile to ipfs
 func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
+	// parse address from url params
+	accaddr := chi.URLParam(r, "addr")
+
+	// the address in the url should match the one in the headers
+	haddr, ok := indexer.GetAddressFromContext(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	acc, err := s.comm.GetAccount(haddr)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if !common.IsSameHexAddress(acc.Hex(), accaddr) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	var profile indexer.Profile
+	err = json.NewDecoder(r.Body).Decode(&profile)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	if !common.IsSameHexAddress(accaddr, profile.Account) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// pin profile to ipfs
+	b, err := json.Marshal(profile)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	uri, err := s.b.PinJSONToIPFS(r.Context(), b)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	go func(acchex string) {
+		// update was successful, we can delete the old one
+		// get the hash from the profile contract
+		hash, err := s.comm.GetProfile(acchex)
+		if err == nil {
+			err = s.b.Unpin(r.Context(), hash)
+			if err != nil {
+				// not sure here if we should return an error or not
+				// pinning the new one was successful, but unpinning the old one failed
+			}
+		}
+	}(acc.Hex())
+
+	err = common.Body(w, &pinResponse{IpfsURL: uri}, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+// PinMultiPartProfile handler for pinning profile to ipfs
+func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 	// Parse the form data to get the uploaded file
 	err := r.ParseMultipartForm(10 << 20) // 10 MB limit (adjust as needed)
 	if err != nil {
@@ -127,6 +195,19 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	go func(acchex string) {
+		// update was successful, we can delete the old one
+		// get the hash from the profile contract
+		hash, err := s.comm.GetProfile(acchex)
+		if err == nil {
+			err = s.b.Unpin(r.Context(), hash)
+			if err != nil {
+				// not sure here if we should return an error or not
+				// pinning the new one was successful, but unpinning the old one failed
+			}
+		}
+	}(acc.Hex())
 
 	err = common.Body(w, &pinResponse{IpfsURL: uri}, nil)
 	if err != nil {

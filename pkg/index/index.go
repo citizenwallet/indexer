@@ -76,7 +76,6 @@ func (i *Indexer) Start() error {
 	// get the latest block
 	latestBlock, err := i.evm.LatestBlock()
 	if err != nil {
-		println("i.eth.LatestBlock: ", err.Error())
 		return ErrIndexingRecoverable
 	}
 	curr := latestBlock.Number()
@@ -223,7 +222,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 
 		logs, err := i.evm.FilterLogs(query)
 		if err != nil {
-			println("logs, err := i.evm.FilterLogs(query): ", err)
 			return ErrIndexingRecoverable
 		}
 
@@ -244,7 +242,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 					// was not fetched yet, fetch it
 					blk, err = i.evm.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
 					if err != nil {
-						print("blk, err = i.evm: ", err)
 						return ErrIndexingRecoverable
 					}
 
@@ -346,7 +343,7 @@ func getERC20Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexe
 	return &indexer.Transfer{
 		TxHash:    log.TxHash.Hex(),
 		TokenID:   0,
-		CreatedAt: indexer.SQLiteTime(blktime),
+		CreatedAt: blktime,
 		From:      trsf.From.Hex(),
 		To:        trsf.To.Hex(),
 		Value:     trsf.Value,
@@ -368,7 +365,7 @@ func getERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*index
 	return &indexer.Transfer{
 		TxHash:    log.TxHash.Hex(),
 		TokenID:   trsf.TokenId.Int64(),
-		CreatedAt: indexer.SQLiteTime(blktime),
+		CreatedAt: blktime,
 		From:      trsf.From.Hex(),
 		To:        trsf.To.Hex(),
 		Value:     common.Big1,
@@ -396,7 +393,7 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 		txs = append(txs, &indexer.Transfer{
 			TxHash:    log.TxHash.Hex(),
 			TokenID:   trsf.Id.Int64(),
-			CreatedAt: indexer.SQLiteTime(blktime),
+			CreatedAt: blktime,
 			From:      trsf.From.Hex(),
 			To:        trsf.To.Hex(),
 			Value:     trsf.Value,
@@ -421,7 +418,7 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 			txs = append(txs, &indexer.Transfer{
 				TxHash:    log.TxHash.Hex(),
 				TokenID:   id.Int64(),
-				CreatedAt: indexer.SQLiteTime(blktime),
+				CreatedAt: blktime,
 				From:      trsf.From.Hex(),
 				To:        trsf.To.Hex(),
 				Value:     trsf.Values[i],

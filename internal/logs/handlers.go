@@ -44,7 +44,7 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t = time.Now()
 	}
-	maxDate := indexer.SQLiteTime(t.UTC())
+	maxDate := t.UTC()
 
 	// parse pagination params from url query
 	limitq := r.URL.Query().Get("limit")
@@ -102,7 +102,7 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t = time.Now()
 	}
-	fromDate := indexer.SQLiteTime(t.UTC())
+	fromDate := t.UTC()
 
 	// parse pagination params from url query
 	limitq := r.URL.Query().Get("limit")

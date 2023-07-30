@@ -113,7 +113,7 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 				continue
 			}
 
-			if time.Now().UTC().Before(tx.CreatedAt.Time().UTC().Add(30 * time.Second)) {
+			if time.Now().UTC().Before(tx.CreatedAt.UTC().Add(30 * time.Second)) {
 				// give 30 seconds to submit before deleting
 				continue
 			}
@@ -143,7 +143,7 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 				// probably an unsubmitted user op
 				log.Default().Println("user op not found: ", err.Error())
 
-				if time.Now().UTC().Before(tx.CreatedAt.Time().UTC().Add(30 * time.Second)) {
+				if time.Now().UTC().Before(tx.CreatedAt.UTC().Add(30 * time.Second)) {
 					// give 30 seconds to submit before deleting
 					continue
 				}

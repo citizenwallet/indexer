@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 )
@@ -37,7 +38,7 @@ type Transfer struct {
 	Hash      string         `json:"hash"`
 	TxHash    string         `json:"tx_hash"`
 	TokenID   int64          `json:"token_id"`
-	CreatedAt SQLiteTime     `json:"created_at"`
+	CreatedAt time.Time      `json:"created_at"`
 	FromTo    string         `json:"-"`
 	From      string         `json:"from"`
 	To        string         `json:"to"`

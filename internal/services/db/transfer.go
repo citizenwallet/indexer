@@ -8,47 +8,22 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/citizenwallet/indexer/internal/storage"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 
 type TransferDB struct {
-	path string
-	db   *sql.DB
+	suffix string
+	db     *sql.DB
 }
 
 // NewTransferDB creates a new DB
-func NewTransferDB(name string) (*TransferDB, error) {
-
-	basePath := storage.GetUserHomeDir()
-	path := fmt.Sprintf("%s/%s/logs_%s.db", basePath, dbBaseFolder, name)
-
-	// check if db exists before opening, since we use rwc mode
-	exists := storage.Exists(path)
-
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?%s", path, dbConfigString))
-	if err != nil {
-		return nil, err
+func NewTransferDB(db *sql.DB, name string) (*TransferDB, error) {
+	txdb := &TransferDB{
+		suffix: name,
+		db:     db,
 	}
 
-	if !exists {
-		// create table
-		err = createTransferTable(db)
-		if err != nil {
-			return nil, err
-		}
-
-		// create indexes
-		err = createTransferTableIndexes(db)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return &TransferDB{
-		path: path,
-		db:   db,
-	}, nil
+	return txdb, nil
 }
 
 // Close closes the db
@@ -58,55 +33,55 @@ func (db *TransferDB) Close() error {
 
 // createTransferTable creates a table to store transfers in the given db
 // from_to_addr is an optimization column to allow searching for transfers withouth using OR
-func createTransferTable(db *sql.DB) error {
-	_, err := db.Exec(`
-	CREATE TABLE t_transfers (
+func (db *TransferDB) CreateTransferTable() error {
+	_, err := db.db.Exec(fmt.Sprintf(`
+	CREATE TABLE t_transfers_%s(
 		hash TEXT NOT NULL PRIMARY KEY,
-		tx_hash TEXT NOT NULL,
-		token_id INTEGER NOT NULL,
-		created_at TEXT NOT NULL,
-		from_to_addr TEXT NOT NULL,
-		from_addr TEXT NOT NULL,
-		to_addr TEXT NOT NULL,
-		nonce INTEGER NOT NULL,
-		value TEXT NOT NULL,
-		data BLOB,
-		status TEXT NOT NULL DEFAULT 'success'
-	)
-	`)
+		tx_hash text NOT NULL,
+		token_id integer NOT NULL,
+		created_at timestamp NOT NULL,
+		from_to_addr text NOT NULL,
+		from_addr text NOT NULL,
+		to_addr text NOT NULL,
+		nonce integer NOT NULL,
+		value text NOT NULL,
+		data bytea DEFAULT '{}',
+		status text NOT NULL DEFAULT 'success'
+	);
+	`, db.suffix))
 
 	return err
 }
 
 // createTransferTableIndexes creates the indexes for transfers in the given db
-func createTransferTableIndexes(db *sql.DB) error {
-	_, err := db.Exec(`
-	CREATE INDEX idx_transfers_tx_hash ON t_transfers (tx_hash);
-	`)
+func (db *TransferDB) CreateTransferTableIndexes() error {
+	_, err := db.db.Exec(fmt.Sprintf(`
+	CREATE INDEX idx_transfers_tx_hash ON t_transfers_%s (tx_hash);
+	`, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	// multi-token queries
-	_, err = db.Exec(`
-	CREATE INDEX idx_transfers_date_from_to_addr ON t_transfers (created_at, from_to_addr COLLATE NOCASE);
-	`)
+	_, err = db.db.Exec(fmt.Sprintf(`
+	CREATE INDEX idx_transfers_date_from_to_addr ON t_transfers_%s (created_at, from_to_addr);
+	`, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	// single-token queries
-	_, err = db.Exec(`
-	CREATE INDEX idx_transfers_date_from_token_id_to_addr ON t_transfers (created_at, token_id, from_to_addr COLLATE NOCASE);
-	`)
+	_, err = db.db.Exec(fmt.Sprintf(`
+	CREATE INDEX idx_transfers_date_from_token_id_to_addr ON t_transfers_%s (created_at, token_id, from_to_addr);
+	`, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	// sending queries
-	_, err = db.Exec(`
-	CREATE INDEX idx_transfers_status_date_from_tx_hash ON t_transfers (status, created_at, tx_hash);
-	`)
+	_, err = db.db.Exec(fmt.Sprintf(`
+	CREATE INDEX idx_transfers_status_date_from_tx_hash ON t_transfers_%s (status, created_at, tx_hash);
+	`, db.suffix))
 	if err != nil {
 		return err
 	}
@@ -118,9 +93,9 @@ func createTransferTableIndexes(db *sql.DB) error {
 func (db *TransferDB) AddTransfer(tx *indexer.Transfer) error {
 
 	// insert transfer on conflict update
-	_, err := db.db.Exec(`
-	INSERT INTO t_transfers (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := db.db.Exec(fmt.Sprintf(`
+	INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	ON CONFLICT(hash) DO UPDATE SET
 		tx_hash = excluded.tx_hash,
 		token_id = excluded.token_id,
@@ -132,7 +107,7 @@ func (db *TransferDB) AddTransfer(tx *indexer.Transfer) error {
 		value = excluded.value,
 		data = excluded.data,
 		status = excluded.status
-	`, tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data, tx.Status)
+	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data, tx.Status)
 
 	return err
 }
@@ -147,9 +122,9 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 
 	for _, t := range tx {
 		// insert transfer on conflict update
-		_, err := dbtx.Exec(`
-			INSERT INTO t_transfers (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		_, err := dbtx.Exec(fmt.Sprintf(`
+			INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			ON CONFLICT(hash) DO UPDATE SET
 				tx_hash = excluded.tx_hash,
 				token_id = excluded.token_id,
@@ -161,7 +136,7 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 				value = excluded.value,
 				data = excluded.data,
 				status = excluded.status
-			`, t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
+			`, db.suffix), t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
 		if err != nil {
 			return dbtx.Rollback()
 		}
@@ -173,9 +148,9 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 // SetStatus sets the status of a transfer to pending
 func (db *TransferDB) SetStatus(status, hash string) error {
 	// if status is success, don't update
-	_, err := db.db.Exec(`
-	UPDATE t_transfers SET status = ? WHERE hash = ? AND status != 'success'
-	`, status, hash)
+	_, err := db.db.Exec(fmt.Sprintf(`
+	UPDATE t_transfers_%s SET status = $1 WHERE hash = $2 AND status != 'success'
+	`, db.suffix), status, hash)
 
 	return err
 }
@@ -183,9 +158,9 @@ func (db *TransferDB) SetStatus(status, hash string) error {
 // SetStatusFromTxHash sets the status of a transfer to pending
 func (db *TransferDB) SetStatusFromTxHash(status, txhash string) error {
 	// if status is success, don't update
-	_, err := db.db.Exec(`
-	UPDATE t_transfers SET status = ? WHERE tx_hash = ? AND status != 'success'
-	`, status, txhash)
+	_, err := db.db.Exec(fmt.Sprintf(`
+	UPDATE t_transfers_%s SET status = $1 WHERE tx_hash = $2 AND status != 'success'
+	`, db.suffix), status, txhash)
 
 	return err
 }
@@ -194,9 +169,9 @@ func (db *TransferDB) SetStatusFromTxHash(status, txhash string) error {
 func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
 	// check if there are multiple transfers with the same tx_hash
 	var count int
-	row := db.db.QueryRow(`
-	SELECT COUNT(*) FROM t_transfers WHERE tx_hash = ?
-	`, tx.TxHash)
+	row := db.db.QueryRow(fmt.Sprintf(`
+	SELECT COUNT(*) FROM t_transfers_%s WHERE tx_hash = $1
+	`, db.suffix), tx.TxHash)
 
 	err := row.Scan(&count)
 	if err != nil {
@@ -214,27 +189,27 @@ func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
 	// is because one was inserted due tu indexing, meaning it is confirmed
 
 	// delete all transfers with a given tx_hash
-	_, err = db.db.Exec(`
-	DELETE FROM t_transfers WHERE tx_hash = ?
-	`, tx.TxHash)
+	_, err = db.db.Exec(fmt.Sprintf(`
+	DELETE FROM t_transfers_%s WHERE tx_hash = $1
+	`, db.suffix), tx.TxHash)
 	if err != nil {
 		return err
 	}
 
 	// insert the confirmed transfer
-	_, err = db.db.Exec(`
-	INSERT OR REPLACE INTO t_transfers (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'success')
-	`, tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data)
+	_, err = db.db.Exec(fmt.Sprintf(`
+	INSERT OR REPLACE INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'success')
+	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data)
 
 	return err
 }
 
 // SetTxHash sets the tx hash of a transfer with no tx_hash
 func (db *TransferDB) SetTxHash(txHash, hash string) error {
-	_, err := db.db.Exec(`
-	UPDATE t_transfers SET tx_hash = ? WHERE hash = ? AND tx_hash = ''
-	`, txHash, hash)
+	_, err := db.db.Exec(fmt.Sprintf(`
+	UPDATE t_transfers_%s SET tx_hash = $1 WHERE hash = $2 AND tx_hash = ''
+	`, db.suffix), txHash, hash)
 
 	return err
 }
@@ -242,9 +217,9 @@ func (db *TransferDB) SetTxHash(txHash, hash string) error {
 // TransferExists returns true if the transfer tx_hash exists in the db
 func (db *TransferDB) TransferExists(txHash string) (bool, error) {
 	var count int
-	row := db.db.QueryRow(`
-	SELECT COUNT(*) FROM t_transfers WHERE tx_hash = ?
-	`, txHash)
+	row := db.db.QueryRow(fmt.Sprintf(`
+	SELECT COUNT(*) FROM t_transfers_%s WHERE tx_hash = $1
+	`, db.suffix), txHash)
 
 	err := row.Scan(&count)
 	if err != nil {
@@ -256,34 +231,34 @@ func (db *TransferDB) TransferExists(txHash string) (bool, error) {
 
 // RemoveSendingTransfer removes a sending transfer from the db
 func (db *TransferDB) RemoveSendingTransfer(hash string) error {
-	_, err := db.db.Exec(`
-	DELETE FROM t_transfers WHERE hash = ? AND tx_hash = '' AND status = 'sending'
-	`, hash)
+	_, err := db.db.Exec(fmt.Sprintf(`
+	DELETE FROM t_transfers_%s WHERE hash = $1 AND tx_hash = '' AND status = 'sending'
+	`, db.suffix), hash)
 
 	return err
 }
 
 // RemovePendingTransfer removes a pending transfer from the db
 func (db *TransferDB) RemovePendingTransfer(hash string) error {
-	_, err := db.db.Exec(`
-	DELETE FROM t_transfers WHERE hash = ? AND tx_hash = '' AND status = 'pending'
-	`, hash)
+	_, err := db.db.Exec(fmt.Sprintf(`
+	DELETE FROM t_transfers_%s WHERE hash = $1 AND tx_hash = '' AND status = 'pending'
+	`, db.suffix), hash)
 
 	return err
 }
 
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated
-func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate indexer.SQLiteTime, limit, offset int) ([]*indexer.Transfer, error) {
+func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate time.Time, limit, offset int) ([]*indexer.Transfer, error) {
 	likePattern := fmt.Sprintf("%%%s%%", addr)
 	transfers := []*indexer.Transfer{}
 
-	rows, err := db.db.Query(`
+	rows, err := db.db.Query(fmt.Sprintf(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
-		FROM t_transfers
-		WHERE created_at <= ? AND token_id = ? AND from_to_addr LIKE ?
+		FROM t_transfers_%s
+		WHERE created_at <= $1 AND token_id = $2 AND lower(from_to_addr) LIKE lower($3)
 		ORDER BY created_at DESC
-		LIMIT ? OFFSET ?
-		`, maxDate, tokenId, likePattern, limit, offset)
+		LIMIT $4 OFFSET $5
+		`, db.suffix), maxDate, tokenId, likePattern, limit, offset)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return transfers, nil
@@ -312,17 +287,17 @@ func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate 
 }
 
 // GetNewTransfers returns the transfers for a given from_addr or to_addr from a given date
-func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate indexer.SQLiteTime, limit int) ([]*indexer.Transfer, error) {
+func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate time.Time, limit int) ([]*indexer.Transfer, error) {
 	likePattern := fmt.Sprintf("%%%s%%", addr)
 	transfers := []*indexer.Transfer{}
 
-	rows, err := db.db.Query(`
+	rows, err := db.db.Query(fmt.Sprintf(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
-		FROM t_transfers
-		WHERE created_at >= ? AND token_id = ? AND from_to_addr LIKE ?
+		FROM t_transfers_%s
+		WHERE created_at >= $1 AND token_id = $2 AND lower(from_to_addr) LIKE lower($3)
 		ORDER BY created_at DESC
-		LIMIT ?
-		`, fromDate, tokenId, likePattern, limit)
+		LIMIT $4
+		`, db.suffix), fromDate, tokenId, likePattern, limit)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return transfers, nil
@@ -352,16 +327,16 @@ func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate index
 
 // GetProcessingTransfers returns the transfers for a given from_addr or to_addr from a given date
 func (db *TransferDB) GetProcessingTransfers(limit int) ([]*indexer.Transfer, error) {
-	fromDate := indexer.SQLiteTime(time.Now().UTC())
+	fromDate := time.Now().UTC()
 	transfers := []*indexer.Transfer{}
 
-	rows, err := db.db.Query(`
+	rows, err := db.db.Query(fmt.Sprintf(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
-		FROM t_transfers
-		WHERE (status = ? OR status = ?) AND created_at <= ? AND tx_hash = ''
+		FROM t_transfers_%s
+		WHERE (status = $1 OR status = $2) AND created_at <= $3 AND tx_hash = ''
 		ORDER BY created_at DESC
-		LIMIT ?
-		`, indexer.TransferStatusPending, indexer.TransferStatusSending, fromDate, limit)
+		LIMIT $4
+		`, db.suffix), indexer.TransferStatusPending, indexer.TransferStatusSending, fromDate, limit)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return transfers, nil

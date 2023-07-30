@@ -72,7 +72,14 @@ func (db *TransferDB) CreateTransferTableIndexes() error {
 
 	// single-token queries
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_date_from_token_id_to_addr ON t_transfers_%s (created_at, token_id, from_to_addr);
+	CREATE INDEX idx_transfers_date_from_token_id_from_addr_simple ON t_transfers_%s (created_at, token_id, from_addr);
+	`, db.suffix))
+	if err != nil {
+		return err
+	}
+
+	_, err = db.db.Exec(fmt.Sprintf(`
+	CREATE INDEX idx_transfers_date_from_token_id_to_addr_simple ON t_transfers_%s (created_at, token_id, to_addr);
 	`, db.suffix))
 	if err != nil {
 		return err
@@ -249,16 +256,19 @@ func (db *TransferDB) RemovePendingTransfer(hash string) error {
 
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated
 func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate time.Time, limit, offset int) ([]*indexer.Transfer, error) {
-	likePattern := fmt.Sprintf("%%%s%%", addr)
 	transfers := []*indexer.Transfer{}
 
 	rows, err := db.db.Query(fmt.Sprintf(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s
-		WHERE created_at <= $1 AND token_id = $2 AND lower(from_to_addr) LIKE lower($3)
+		WHERE created_at <= $1 AND token_id = $2 AND from_addr = $3
+		UNION ALL
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
+		FROM t_transfers_%s
+		WHERE created_at <= $4 AND token_id = $5 AND from_addr = $6
 		ORDER BY created_at DESC
-		LIMIT $4 OFFSET $5
-		`, db.suffix), maxDate, tokenId, likePattern, limit, offset)
+		LIMIT $7 OFFSET $8
+		`, db.suffix, db.suffix), maxDate, tokenId, addr, maxDate, tokenId, addr, limit, offset)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return transfers, nil
@@ -288,16 +298,19 @@ func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate 
 
 // GetNewTransfers returns the transfers for a given from_addr or to_addr from a given date
 func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate time.Time, limit int) ([]*indexer.Transfer, error) {
-	likePattern := fmt.Sprintf("%%%s%%", addr)
 	transfers := []*indexer.Transfer{}
 
 	rows, err := db.db.Query(fmt.Sprintf(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s
-		WHERE created_at >= $1 AND token_id = $2 AND lower(from_to_addr) LIKE lower($3)
+		WHERE created_at >= $1 AND token_id = $2 AND from_to_addr LIKE $3
+		UNION ALL
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
+		FROM t_transfers_%s
+		WHERE created_at >= $4 AND token_id = $5 AND from_to_addr LIKE $6
 		ORDER BY created_at DESC
-		LIMIT $4
-		`, db.suffix), fromDate, tokenId, likePattern, limit)
+		LIMIT $7
+		`, db.suffix, db.suffix), fromDate, tokenId, addr, fromDate, tokenId, addr, limit)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return transfers, nil
@@ -333,10 +346,14 @@ func (db *TransferDB) GetProcessingTransfers(limit int) ([]*indexer.Transfer, er
 	rows, err := db.db.Query(fmt.Sprintf(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s
-		WHERE (status = $1 OR status = $2) AND created_at <= $3 AND tx_hash = ''
+		WHERE status = $1 AND created_at <= $2 AND tx_hash = ''
+		UNION ALL
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
+		FROM t_transfers_%s
+		WHERE status = $3 AND created_at <= $4 AND tx_hash = ''
 		ORDER BY created_at DESC
-		LIMIT $4
-		`, db.suffix), indexer.TransferStatusPending, indexer.TransferStatusSending, fromDate, limit)
+		LIMIT $5
+		`, db.suffix, db.suffix), indexer.TransferStatusPending, fromDate, indexer.TransferStatusSending, fromDate, limit)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return transfers, nil

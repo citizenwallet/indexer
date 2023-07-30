@@ -30,6 +30,19 @@ func (s *Service) AddEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	// check whether event already exists
+	name := s.db.TransferName(ev.Contract)
+	exists, err := s.db.TransferTableExists(name)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if exists {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	// if we are adding an event, it should be queued for indexing
 	ev.State = indexer.EventStateQueued
 

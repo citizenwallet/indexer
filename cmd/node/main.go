@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/citizenwallet/indexer/internal/config"
+	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/internal/services/oprequest"
 	"github.com/citizenwallet/indexer/pkg/index"
+	"github.com/citizenwallet/indexer/pkg/router"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -19,9 +21,9 @@ func main() {
 
 	env := flag.String("env", "", "path to .env file")
 
-	contract := flag.String("contract", "", "contract address to sync")
+	port := flag.Int("port", 3000, "port to listen on")
 
-	startBlk := flag.Int64("start", 0, "which block to start from")
+	sync := flag.Int("sync", 5, "sync from block number (default: 5)")
 
 	ws := flag.Bool("ws", false, "enable websocket")
 
@@ -109,8 +111,20 @@ func main() {
 	defer i.Close()
 
 	go func() {
-		quitAck <- i.IndexERC20From(*contract, *startBlk)
+		quitAck <- i.Background(*sync)
 	}()
+
+	log.Default().Println("starting api service...")
+
+	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret)
+
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, bu)
+
+	go func() {
+		quitAck <- api.Start(*port)
+	}()
+
+	log.Default().Println("listening on port: ", *port)
 
 	for err := range quitAck {
 		if err != nil {

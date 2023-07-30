@@ -46,6 +46,12 @@ func (s *Service) AddEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = txdb.CreateTransferTableIndexes()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	// add event to database
 	err = s.db.EventDB.AddEvent(ev.Contract, ev.State, ev.StartBlock, ev.LastBlock, ev.Standard, ev.Name, ev.Symbol)
 	if err != nil {

@@ -74,6 +74,21 @@ func (db *EventDB) CreateEventsTableIndexes(suffix string) error {
 	return nil
 }
 
+// GetEvent gets an event from the db by contract and standard
+func (db *EventDB) GetEvent(contract string, standard indexer.Standard) (*indexer.Event, error) {
+	var event indexer.Event
+	err := db.db.QueryRow(fmt.Sprintf(`
+	SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol
+	FROM t_events_%s
+	WHERE contract = $1 AND standard = $2
+	`, db.suffix), contract, standard).Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Standard, &event.Name, &event.Symbol)
+	if err != nil {
+		return nil, err
+	}
+
+	return &event, nil
+}
+
 // GetEvents gets all events from the db
 func (db *EventDB) GetEvents() ([]*indexer.Event, error) {
 	rows, err := db.db.Query(fmt.Sprintf(`

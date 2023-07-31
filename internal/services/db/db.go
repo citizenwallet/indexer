@@ -16,13 +16,14 @@ type DB struct {
 	chainID *big.Int
 	mu      sync.Mutex
 	db      *sql.DB
+	rdb     *sql.DB
 
 	EventDB    *EventDB
 	TransferDB map[string]*TransferDB
 }
 
 // NewDB instantiates a new DB
-func NewDB(chainID *big.Int, username, password, name, host string) (*DB, error) {
+func NewDB(chainID *big.Int, username, password, name, host, rhost string) (*DB, error) {
 	connStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, host)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -34,9 +35,20 @@ func NewDB(chainID *big.Int, username, password, name, host string) (*DB, error)
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	rconnStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, rhost)
+	rdb, err := sql.Open("postgres", rconnStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	err = rdb.Ping()
+	if err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
 	evname := chainID.String()
 
-	eventDB, err := NewEventDB(db, evname)
+	eventDB, err := NewEventDB(db, rdb, evname)
 	if err != nil {
 		return nil, err
 	}
@@ -44,6 +56,7 @@ func NewDB(chainID *big.Int, username, password, name, host string) (*DB, error)
 	d := &DB{
 		chainID: chainID,
 		db:      db,
+		rdb:     rdb,
 		EventDB: eventDB,
 	}
 
@@ -78,7 +91,7 @@ func NewDB(chainID *big.Int, username, password, name, host string) (*DB, error)
 		name := d.TransferName(ev.Contract)
 		log.Default().Println("creating transfer db for: ", name)
 
-		txdb[name], err = NewTransferDB(db, name)
+		txdb[name], err = NewTransferDB(db, rdb, name)
 		if err != nil {
 			return nil, err
 		}
@@ -170,7 +183,7 @@ func (d *DB) AddTransferDB(contract string) (*TransferDB, error) {
 	if txdb, ok := d.TransferDB[name]; ok {
 		return txdb, nil
 	}
-	txdb, err := NewTransferDB(d.db, name)
+	txdb, err := NewTransferDB(d.db, d.rdb, name)
 	if err != nil {
 		return nil, err
 	}

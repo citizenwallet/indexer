@@ -25,6 +25,7 @@ type Config struct {
 	DBPassword            string `env:"POSTGRES_PASSWORD,required"`
 	DBName                string `env:"POSTGRES_DB,required"`
 	DBHost                string `env:"POSTGRES_HOST,required"`
+	DBReaderHost          string `env:"POSTGRES_READER_HOST,required"`
 }
 
 func New(ctx context.Context, envpath string) (*Config, error) {

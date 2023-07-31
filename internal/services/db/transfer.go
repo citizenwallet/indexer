@@ -14,13 +14,15 @@ import (
 type TransferDB struct {
 	suffix string
 	db     *sql.DB
+	rdb    *sql.DB
 }
 
 // NewTransferDB creates a new DB
-func NewTransferDB(db *sql.DB, name string) (*TransferDB, error) {
+func NewTransferDB(db, rdb *sql.DB, name string) (*TransferDB, error) {
 	txdb := &TransferDB{
 		suffix: name,
 		db:     db,
+		rdb:    rdb,
 	}
 
 	return txdb, nil
@@ -29,6 +31,10 @@ func NewTransferDB(db *sql.DB, name string) (*TransferDB, error) {
 // Close closes the db
 func (db *TransferDB) Close() error {
 	return db.db.Close()
+}
+
+func (db *TransferDB) CloseR() error {
+	return db.rdb.Close()
 }
 
 // createTransferTable creates a table to store transfers in the given db
@@ -62,9 +68,16 @@ func (db *TransferDB) CreateTransferTableIndexes() error {
 		return err
 	}
 
-	// multi-token queries
+	// filtering by address
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_date_from_to_addr ON t_transfers_%s (created_at, from_to_addr);
+	CREATE INDEX idx_transfers_to_addr ON t_transfers_%s (to_addr);
+	`, db.suffix))
+	if err != nil {
+		return err
+	}
+
+	_, err = db.db.Exec(fmt.Sprintf(`
+	CREATE INDEX idx_transfers_to_addr ON t_transfers_%s (from_addr);
 	`, db.suffix))
 	if err != nil {
 		return err
@@ -176,7 +189,7 @@ func (db *TransferDB) SetStatusFromTxHash(status, txhash string) error {
 func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
 	// check if there are multiple transfers with the same tx_hash
 	var count int
-	row := db.db.QueryRow(fmt.Sprintf(`
+	row := db.rdb.QueryRow(fmt.Sprintf(`
 	SELECT COUNT(*) FROM t_transfers_%s WHERE tx_hash = $1
 	`, db.suffix), tx.TxHash)
 
@@ -224,7 +237,7 @@ func (db *TransferDB) SetTxHash(txHash, hash string) error {
 // TransferExists returns true if the transfer tx_hash exists in the db
 func (db *TransferDB) TransferExists(txHash string) (bool, error) {
 	var count int
-	row := db.db.QueryRow(fmt.Sprintf(`
+	row := db.rdb.QueryRow(fmt.Sprintf(`
 	SELECT COUNT(*) FROM t_transfers_%s WHERE tx_hash = $1
 	`, db.suffix), txHash)
 
@@ -258,7 +271,7 @@ func (db *TransferDB) RemovePendingTransfer(hash string) error {
 func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate time.Time, limit, offset int) ([]*indexer.Transfer, error) {
 	transfers := []*indexer.Transfer{}
 
-	rows, err := db.db.Query(fmt.Sprintf(`
+	rows, err := db.rdb.Query(fmt.Sprintf(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s
 		WHERE created_at <= $1 AND token_id = $2 AND from_addr = $3
@@ -300,7 +313,7 @@ func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate 
 func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate time.Time, limit int) ([]*indexer.Transfer, error) {
 	transfers := []*indexer.Transfer{}
 
-	rows, err := db.db.Query(fmt.Sprintf(`
+	rows, err := db.rdb.Query(fmt.Sprintf(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s
 		WHERE created_at >= $1 AND token_id = $2 AND from_addr = $3
@@ -343,7 +356,7 @@ func (db *TransferDB) GetProcessingTransfers(limit int) ([]*indexer.Transfer, er
 	fromDate := time.Now().UTC()
 	transfers := []*indexer.Transfer{}
 
-	rows, err := db.db.Query(fmt.Sprintf(`
+	rows, err := db.rdb.Query(fmt.Sprintf(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s
 		WHERE status = $1 AND created_at <= $2 AND tx_hash = ''

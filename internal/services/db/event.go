@@ -11,13 +11,15 @@ import (
 type EventDB struct {
 	suffix string
 	db     *sql.DB
+	rdb    *sql.DB
 }
 
 // NewTransferDB creates a new DB
-func NewEventDB(db *sql.DB, name string) (*EventDB, error) {
+func NewEventDB(db, rdb *sql.DB, name string) (*EventDB, error) {
 	evdb := &EventDB{
 		suffix: name,
 		db:     db,
+		rdb:    rdb,
 	}
 
 	return evdb, nil
@@ -26,6 +28,10 @@ func NewEventDB(db *sql.DB, name string) (*EventDB, error) {
 // Close closes the db
 func (db *EventDB) Close() error {
 	return db.db.Close()
+}
+
+func (db *EventDB) CloseR() error {
+	return db.rdb.Close()
 }
 
 // createEventsTable creates a table to store events in the given db
@@ -77,7 +83,7 @@ func (db *EventDB) CreateEventsTableIndexes(suffix string) error {
 // GetEvent gets an event from the db by contract and standard
 func (db *EventDB) GetEvent(contract string, standard indexer.Standard) (*indexer.Event, error) {
 	var event indexer.Event
-	err := db.db.QueryRow(fmt.Sprintf(`
+	err := db.rdb.QueryRow(fmt.Sprintf(`
 	SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol
 	FROM t_events_%s
 	WHERE contract = $1 AND standard = $2
@@ -91,7 +97,7 @@ func (db *EventDB) GetEvent(contract string, standard indexer.Standard) (*indexe
 
 // GetEvents gets all events from the db
 func (db *EventDB) GetEvents() ([]*indexer.Event, error) {
-	rows, err := db.db.Query(fmt.Sprintf(`
+	rows, err := db.rdb.Query(fmt.Sprintf(`
     SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol
     FROM t_events_%s
     ORDER BY created_at ASC
@@ -117,7 +123,7 @@ func (db *EventDB) GetEvents() ([]*indexer.Event, error) {
 
 // GetOutdatedEvents gets all queued events from the db sorted by created_at
 func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*indexer.Event, error) {
-	rows, err := db.db.Query(fmt.Sprintf(`
+	rows, err := db.rdb.Query(fmt.Sprintf(`
     SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol
     FROM t_events_%s
     WHERE last_block < $1
@@ -144,7 +150,7 @@ func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*indexer.Event, error)
 
 // GetQueuedEvents gets all queued events from the db sorted by created_at
 func (db *EventDB) GetQueuedEvents() ([]*indexer.Event, error) {
-	rows, err := db.db.Query(fmt.Sprintf(`
+	rows, err := db.rdb.Query(fmt.Sprintf(`
     SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol
     FROM t_events_%s
     WHERE state = $1

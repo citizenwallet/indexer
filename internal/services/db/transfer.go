@@ -265,7 +265,7 @@ func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate 
 		UNION ALL
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s
-		WHERE created_at <= $4 AND token_id = $5 AND from_addr = $6
+		WHERE created_at <= $4 AND token_id = $5 AND to_addr = $6
 		ORDER BY created_at DESC
 		LIMIT $7 OFFSET $8
 		`, db.suffix, db.suffix), maxDate, tokenId, addr, maxDate, tokenId, addr, limit, offset)
@@ -303,11 +303,11 @@ func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate time.
 	rows, err := db.db.Query(fmt.Sprintf(`
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s
-		WHERE created_at >= $1 AND token_id = $2 AND from_to_addr LIKE $3
+		WHERE created_at >= $1 AND token_id = $2 AND from_addr = $3
 		UNION ALL
 		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s
-		WHERE created_at >= $4 AND token_id = $5 AND from_to_addr LIKE $6
+		WHERE created_at >= $4 AND token_id = $5 AND to_addr = $6
 		ORDER BY created_at DESC
 		LIMIT $7
 		`, db.suffix, db.suffix), fromDate, tokenId, addr, fromDate, tokenId, addr, limit)

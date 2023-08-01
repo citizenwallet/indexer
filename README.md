@@ -230,6 +230,82 @@ Body
 }
 ```
 
-## Local storage
+### Pin a profile with image [Protected]
 
-All dbs are stored under your home folder `~/.cw/`.
+Create or update a profile.
+
+`[PUT] /profiles/{address}`
+
+URL params
+
+`{address}`: the address that this profile belongs to.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+Multi-part form `file`
+
+A jpg, png or gif.
+
+Multi-part form `body`
+
+```
+{
+    "data": data, // base64 encoded data
+    "encoding": "base64", // how is the data encoded
+    "expiry": expiry,
+}
+```
+
+Data
+
+`indexer.Profile`
+
+### Update a pinned profile [Protected]
+
+Updates a profile with no image modifications.
+
+`[PATCH] /profiles/{address}`
+
+URL params
+
+`{address}`: the address that this profile belongs to.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+Body
+
+```
+{
+    "data": data, // base64 encoded data
+    "encoding": "base64", // how is the data encoded
+    "expiry": expiry,
+}
+```
+
+Data
+
+`indexer.Profile`
+
+### Un-pin a pinned profile [Protected]
+
+Un-pins a profile.
+
+`[DELETE] /profiles/{address}`
+
+URL params
+
+`{address}`: the address that this profile belongs to.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+### Storage
+
+We use postgres. If you have docker installed, you can spin up an instance using `docker compose up db`.
+
+The tables will be generated as the application runs.

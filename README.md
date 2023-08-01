@@ -41,23 +41,15 @@ Replace URLs with your own RPC urls
 
 This will build for the current platform you are on. It's possible to cross-compile if you provide flags.
 
-`go build -o indexer ./cmd/indexer/main.go`
+`go build -o indexer ./cmd/node/main.go`
 
 Linux cross-compilation
 
-`CC=x86_64-linux-musl-gcc CXX=x86_64-linux-musl-g++ GOARCH=amd64 GOOS=linux CGO_ENABLED=1 go build -ldflags "-linkmode external -extldflags -static" -o indexer ./cmd/indexer/main.go`
+`GOARCH=amd64 GOOS=linux go build -o indexer ./cmd/node/main.go`
 
 Make it executable
 
 `chmod +x indexer`
-
-### Cross-compiling from macOS to Linux
-
-Due to the use of go-sqlite3 which uses CGO, compilation is a bit fun.
-
-`brew install FiloSottile/musl-cross/musl-cross` << this can take a while
-
-`CC=x86_64-linux-musl-gcc CXX=x86_64-linux-musl-g++ GOARCH=amd64 GOOS=linux CGO_ENABLED=1 go build -ldflags "-linkmode external -extldflags -static" -o indexer ./cmd/indexer/main.go`
 
 ## Run indexer
 
@@ -308,4 +300,4 @@ Headers
 
 We use postgres. If you have docker installed, you can spin up an instance using `docker compose up db`.
 
-The tables will be generated as the application runs.
+The tables will be generated as needed.

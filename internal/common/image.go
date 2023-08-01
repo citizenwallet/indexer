@@ -67,12 +67,6 @@ func imageToBytes(img image.Image, format ImageFormat) ([]byte, error) {
 		return nil, errors.New("unsupported image format: " + string(format))
 	}
 
-	// Encode the image as JPG and save it to the buffer
-	err := jpeg.Encode(&buf, img, nil)
-	if err != nil {
-		return nil, err
-	}
-
 	return buf.Bytes(), nil
 }
 

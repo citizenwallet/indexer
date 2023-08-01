@@ -178,6 +178,11 @@ func (s *Service) AddSending(w http.ResponseWriter, r *http.Request) {
 
 	log.Status = indexer.TransferStatusSending
 
+	// make sure the addresses are EIP55 checksummed
+	log.To = common.ChecksumAddress(log.To)
+	log.From = common.ChecksumAddress(log.From)
+	log.FromTo = log.CombineFromTo()
+
 	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)

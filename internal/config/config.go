@@ -15,8 +15,17 @@ type Config struct {
 	EntryPointAddress     string `env:"ERC4337_ENTRYPOINT,required"`
 	AccountFactoryAddress string `env:"ERC4337_ACCOUNT_FACTORY,required"`
 	BundlerOriginHeader   string `env:"ERC4337_ORIGIN_HEADER,required"`
+	ProfileAddress        string `env:"PROFILE_ADDRESS,required"`
 	APIKEY                string `env:"API_KEY,required"`
 	SentryURL             string `env:"SENTRY_URL"`
+	PinataBaseURL         string `env:"PINATA_BASE_URL"`
+	PinataAPIKey          string `env:"PINATA_API_KEY"`
+	PinataAPISecret       string `env:"PINATA_API_SECRET"`
+	DBUsername            string `env:"POSTGRES_USER,required"`
+	DBPassword            string `env:"POSTGRES_PASSWORD,required"`
+	DBName                string `env:"POSTGRES_DB,required"`
+	DBHost                string `env:"POSTGRES_HOST,required"`
+	DBReaderHost          string `env:"POSTGRES_READER_HOST,required"`
 }
 
 func New(ctx context.Context, envpath string) (*Config, error) {

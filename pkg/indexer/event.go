@@ -1,5 +1,7 @@
 package indexer
 
+import "time"
+
 type EventState string
 
 const (
@@ -19,8 +21,8 @@ const (
 type Event struct {
 	Contract   string     `json:"contract"`
 	State      EventState `json:"state"`
-	CreatedAt  SQLiteTime `json:"created_at"`
-	UpdatedAt  SQLiteTime `json:"updated_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 	StartBlock int64      `json:"start_block"`
 	LastBlock  int64      `json:"last_block"`
 	Standard   Standard   `json:"standard"`

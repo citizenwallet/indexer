@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/citizenwallet/indexer/internal/db"
+	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 
@@ -30,8 +30,40 @@ func (s *Service) AddEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	// check whether event already exists
+	name := s.db.TransferName(ev.Contract)
+	exists, err := s.db.TransferTableExists(name)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if exists {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	// if we are adding an event, it should be queued for indexing
 	ev.State = indexer.EventStateQueued
+
+	// create transfer db for event
+	txdb, err := s.db.AddTransferDB(ev.Contract)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = txdb.CreateTransferTable()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = txdb.CreateTransferTableIndexes()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	// add event to database
 	err = s.db.EventDB.AddEvent(ev.Contract, ev.State, ev.StartBlock, ev.LastBlock, ev.Standard, ev.Name, ev.Symbol)

@@ -7,11 +7,10 @@ import (
 	"time"
 
 	"github.com/citizenwallet/indexer/internal/config"
-	"github.com/citizenwallet/indexer/internal/db"
-	"github.com/citizenwallet/indexer/internal/ethrequest"
-	"github.com/citizenwallet/indexer/internal/oprequest"
+	"github.com/citizenwallet/indexer/internal/services/db"
+	"github.com/citizenwallet/indexer/internal/services/ethrequest"
+	"github.com/citizenwallet/indexer/internal/services/oprequest"
 	"github.com/citizenwallet/indexer/pkg/index"
-	"github.com/citizenwallet/indexer/pkg/router"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -20,9 +19,9 @@ func main() {
 
 	env := flag.String("env", "", "path to .env file")
 
-	port := flag.Int("port", 3000, "port to listen on")
+	contract := flag.String("contract", "", "contract address to sync")
 
-	sync := flag.Int("sync", 5, "sync from block number (default: 5)")
+	startBlk := flag.Int64("start", 0, "which block to start from")
 
 	ws := flag.Bool("ws", false, "enable websocket")
 
@@ -93,7 +92,7 @@ func main() {
 
 	log.Default().Println("starting internal db service...")
 
-	d, err := db.NewDB(chid)
+	d, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -110,18 +109,8 @@ func main() {
 	defer i.Close()
 
 	go func() {
-		quitAck <- i.Background(*sync)
+		quitAck <- i.IndexERC20From(*contract, *startBlk)
 	}()
-
-	log.Default().Println("starting api service...")
-
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, evm, d)
-
-	go func() {
-		quitAck <- api.Start(*port)
-	}()
-
-	log.Default().Println("listening on port: ", *port)
 
 	for err := range quitAck {
 		if err != nil {

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/citizenwallet/indexer/internal/common"
-	"github.com/citizenwallet/indexer/internal/db"
-	"github.com/citizenwallet/indexer/internal/ethrequest"
+	"github.com/citizenwallet/indexer/internal/services/db"
+	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/go-chi/chi/v5"
 )
@@ -44,7 +44,7 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t = time.Now()
 	}
-	maxDate := indexer.SQLiteTime(t.UTC())
+	maxDate := t.UTC()
 
 	// parse pagination params from url query
 	limitq := r.URL.Query().Get("limit")
@@ -72,8 +72,10 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	chkaddr := common.ChecksumAddress(addr)
+
 	// get logs from db
-	logs, err := tdb.GetPaginatedTransfers(int64(tokenId), addr, maxDate, limit, offset)
+	logs, err := tdb.GetPaginatedTransfers(int64(tokenId), chkaddr, maxDate, limit, offset)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -102,7 +104,7 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t = time.Now()
 	}
-	fromDate := indexer.SQLiteTime(t.UTC())
+	fromDate := t.UTC()
 
 	// parse pagination params from url query
 	limitq := r.URL.Query().Get("limit")
@@ -124,8 +126,10 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	chkaddr := common.ChecksumAddress(addr)
+
 	// get logs from db
-	logs, err := tdb.GetNewTransfers(int64(tokenId), addr, fromDate, limit)
+	logs, err := tdb.GetNewTransfers(int64(tokenId), chkaddr, fromDate, limit)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -177,6 +181,11 @@ func (s *Service) AddSending(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Status = indexer.TransferStatusSending
+
+	// make sure the addresses are EIP55 checksummed
+	log.To = common.ChecksumAddress(log.To)
+	log.From = common.ChecksumAddress(log.From)
+	log.FromTo = log.CombineFromTo()
 
 	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
 	if !ok {

@@ -3,15 +3,16 @@ module github.com/citizenwallet/indexer
 go 1.20
 
 require (
-	github.com/citizenwallet/smartcontracts v0.0.47
+	github.com/citizenwallet/smartcontracts v0.0.50
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/ethereum-optimism/optimism v1.0.9
 	github.com/ethereum/go-ethereum v1.11.6
 	github.com/getsentry/sentry-go v0.22.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/joho/godotenv v1.5.1
-	github.com/mattn/go-sqlite3 v1.14.17
+	github.com/lib/pq v1.10.9
 	github.com/sethvargo/go-envconfig v0.9.0
+	golang.org/x/image v0.9.0
 )
 
 require (
@@ -80,7 +81,7 @@ require (
 	golang.org/x/crypto v0.9.0 // indirect
 	golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb // indirect
 	golang.org/x/sys v0.8.0 // indirect
-	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/text v0.11.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/protobuf v1.29.1 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect

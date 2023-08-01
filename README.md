@@ -41,23 +41,15 @@ Replace URLs with your own RPC urls
 
 This will build for the current platform you are on. It's possible to cross-compile if you provide flags.
 
-`go build -o indexer ./cmd/indexer/main.go`
+`go build -o indexer ./cmd/node/main.go`
 
 Linux cross-compilation
 
-`CC=x86_64-linux-musl-gcc CXX=x86_64-linux-musl-g++ GOARCH=amd64 GOOS=linux CGO_ENABLED=1 go build -ldflags "-linkmode external -extldflags -static" -o indexer ./cmd/indexer/main.go`
+`GOARCH=amd64 GOOS=linux go build -o indexer ./cmd/node/main.go`
 
 Make it executable
 
 `chmod +x indexer`
-
-### Cross-compiling from macOS to Linux
-
-Due to the use of go-sqlite3 which uses CGO, compilation is a bit fun.
-
-`brew install FiloSottile/musl-cross/musl-cross` << this can take a while
-
-`CC=x86_64-linux-musl-gcc CXX=x86_64-linux-musl-g++ GOARCH=amd64 GOOS=linux CGO_ENABLED=1 go build -ldflags "-linkmode external -extldflags -static" -o indexer ./cmd/indexer/main.go`
 
 ## Run indexer
 
@@ -230,6 +222,82 @@ Body
 }
 ```
 
-## Local storage
+### Pin a profile with image [Protected]
 
-All dbs are stored under your home folder `~/.cw/`.
+Create or update a profile.
+
+`[PUT] /profiles/{address}`
+
+URL params
+
+`{address}`: the address that this profile belongs to.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+Multi-part form `file`
+
+A jpg, png or gif.
+
+Multi-part form `body`
+
+```
+{
+    "data": data, // base64 encoded data
+    "encoding": "base64", // how is the data encoded
+    "expiry": expiry,
+}
+```
+
+Data
+
+`indexer.Profile`
+
+### Update a pinned profile [Protected]
+
+Updates a profile with no image modifications.
+
+`[PATCH] /profiles/{address}`
+
+URL params
+
+`{address}`: the address that this profile belongs to.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+Body
+
+```
+{
+    "data": data, // base64 encoded data
+    "encoding": "base64", // how is the data encoded
+    "expiry": expiry,
+}
+```
+
+Data
+
+`indexer.Profile`
+
+### Un-pin a pinned profile [Protected]
+
+Un-pins a profile.
+
+`[DELETE] /profiles/{address}`
+
+URL params
+
+`{address}`: the address that this profile belongs to.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+### Storage
+
+We use postgres. If you have docker installed, you can spin up an instance using `docker compose up db`.
+
+The tables will be generated as needed.

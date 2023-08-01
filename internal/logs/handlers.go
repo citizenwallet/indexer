@@ -72,8 +72,10 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	chkaddr := common.ChecksumAddress(addr)
+
 	// get logs from db
-	logs, err := tdb.GetPaginatedTransfers(int64(tokenId), addr, maxDate, limit, offset)
+	logs, err := tdb.GetPaginatedTransfers(int64(tokenId), chkaddr, maxDate, limit, offset)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -124,8 +126,10 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	chkaddr := common.ChecksumAddress(addr)
+
 	// get logs from db
-	logs, err := tdb.GetNewTransfers(int64(tokenId), addr, fromDate, limit)
+	logs, err := tdb.GetNewTransfers(int64(tokenId), chkaddr, fromDate, limit)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

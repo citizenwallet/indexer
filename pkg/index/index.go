@@ -242,48 +242,50 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 		}
 
 		if len(logs) > 0 {
-			log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " ...")
-
 			txs := []*indexer.Transfer{}
 
 			// store a map of blocks by block number
 			blks := map[int64]*types.Block{}
 
-			for _, log := range logs {
+			for index, l := range logs {
 				// to reduce API consumption, cache blocks by number
 
 				// check if it was already fetched
-				blk, ok := blks[int64(log.BlockNumber)]
+				blk, ok := blks[int64(l.BlockNumber)]
 				if !ok {
 					// was not fetched yet, fetch it
-					blk, err = i.evm.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
+					blk, err = i.evm.BlockByNumber(big.NewInt(int64(l.BlockNumber)))
 					if err != nil {
 						return ErrIndexingRecoverable
 					}
 
 					// save in our map for later
-					blks[int64(log.BlockNumber)] = blk
+					blks[int64(l.BlockNumber)] = blk
 				}
 
 				blktime := time.UnixMilli(int64(blk.Time()) * 1000).UTC()
 
+				if index == 0 {
+					log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " [", blktime, "] ...")
+				}
+
 				switch ev.Standard {
 				case indexer.ERC20:
-					tx, err := getERC20Log(blktime, contractAbi, log)
+					tx, err := getERC20Log(blktime, contractAbi, l)
 					if err != nil {
 						return err
 					}
 
 					txs = append(txs, tx)
 				case indexer.ERC721:
-					tx, err := getERC721Log(blktime, contractAbi, log)
+					tx, err := getERC721Log(blktime, contractAbi, l)
 					if err != nil {
 						return err
 					}
 
 					txs = append(txs, tx)
 				case indexer.ERC1155:
-					tx, err := getERC1155Logs(blktime, contractAbi, log)
+					tx, err := getERC1155Logs(blktime, contractAbi, l)
 					if err != nil {
 						return err
 					}
@@ -417,48 +419,50 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 		}
 
 		if len(logs) > 0 {
-			log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " ...")
-
 			txs := []*indexer.Transfer{}
 
 			// store a map of blocks by block number
 			blks := map[int64]*types.Block{}
 
-			for _, log := range logs {
+			for index, l := range logs {
 				// to reduce API consumption, cache blocks by number
 
 				// check if it was already fetched
-				blk, ok := blks[int64(log.BlockNumber)]
+				blk, ok := blks[int64(l.BlockNumber)]
 				if !ok {
 					// was not fetched yet, fetch it
-					blk, err = i.evm.BlockByNumber(big.NewInt(int64(log.BlockNumber)))
+					blk, err = i.evm.BlockByNumber(big.NewInt(int64(l.BlockNumber)))
 					if err != nil {
 						return ErrIndexingRecoverable
 					}
 
 					// save in our map for later
-					blks[int64(log.BlockNumber)] = blk
+					blks[int64(l.BlockNumber)] = blk
 				}
 
 				blktime := time.UnixMilli(int64(blk.Time()) * 1000).UTC()
 
+				if index == 0 {
+					log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " [", blktime, "] ...")
+				}
+
 				switch ev.Standard {
 				case indexer.ERC20:
-					tx, err := getERC20Log(blktime, contractAbi, log)
+					tx, err := getERC20Log(blktime, contractAbi, l)
 					if err != nil {
 						return err
 					}
 
 					txs = append(txs, tx)
 				case indexer.ERC721:
-					tx, err := getERC721Log(blktime, contractAbi, log)
+					tx, err := getERC721Log(blktime, contractAbi, l)
 					if err != nil {
 						return err
 					}
 
 					txs = append(txs, tx)
 				case indexer.ERC1155:
-					tx, err := getERC1155Logs(blktime, contractAbi, log)
+					tx, err := getERC1155Logs(blktime, contractAbi, l)
 					if err != nil {
 						return err
 					}

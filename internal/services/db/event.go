@@ -57,22 +57,22 @@ func (db *EventDB) CreateEventsTable(suffix string) error {
 // createEventsTableIndexes creates the indexes for events in the given db
 func (db *EventDB) CreateEventsTableIndexes(suffix string) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
-    CREATE INDEX idx_events_state ON t_events_%s (state);
-    `, suffix))
+    CREATE INDEX idx_events_%s_state ON t_events_%s (state);
+    `, suffix, suffix))
 	if err != nil {
 		return err
 	}
 
 	_, err = db.db.Exec(fmt.Sprintf(`
-    CREATE INDEX idx_events_address_signature ON t_events_%s (contract, standard);
-    `, suffix))
+    CREATE INDEX idx_events_%s_address_signature ON t_events_%s (contract, standard);
+    `, suffix, suffix))
 	if err != nil {
 		return err
 	}
 
 	_, err = db.db.Exec(fmt.Sprintf(`
-    CREATE INDEX idx_events_address_signature_state ON t_events_%s (contract, standard, state);
-    `, suffix))
+    CREATE INDEX idx_events_%s_address_signature_state ON t_events_%s (contract, standard, state);
+    `, suffix, suffix))
 	if err != nil {
 		return err
 	}

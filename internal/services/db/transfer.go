@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 
@@ -61,47 +62,49 @@ func (db *TransferDB) CreateTransferTable() error {
 
 // createTransferTableIndexes creates the indexes for transfers in the given db
 func (db *TransferDB) CreateTransferTableIndexes() error {
+	suffix := common.ShortenName(db.suffix, 6)
+
 	_, err := db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_tx_hash ON t_transfers_%s (tx_hash);
-	`, db.suffix))
+	CREATE INDEX idx_transfers_%s_tx_hash ON t_transfers_%s (tx_hash);
+	`, suffix, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	// filtering by address
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_to_addr ON t_transfers_%s (to_addr);
-	`, db.suffix))
+	CREATE INDEX idx_transfers_%s_to_addr ON t_transfers_%s (to_addr);
+	`, suffix, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_to_addr ON t_transfers_%s (from_addr);
-	`, db.suffix))
+	CREATE INDEX idx_transfers_%s_from_addr ON t_transfers_%s (from_addr);
+	`, suffix, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	// single-token queries
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_date_from_token_id_from_addr_simple ON t_transfers_%s (created_at, token_id, from_addr);
-	`, db.suffix))
+	CREATE INDEX idx_transfers_%s_date_from_token_id_from_addr_simple ON t_transfers_%s (created_at, token_id, from_addr);
+	`, suffix, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_date_from_token_id_to_addr_simple ON t_transfers_%s (created_at, token_id, to_addr);
-	`, db.suffix))
+	CREATE INDEX idx_transfers_%s_date_from_token_id_to_addr_simple ON t_transfers_%s (created_at, token_id, to_addr);
+	`, suffix, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	// sending queries
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_status_date_from_tx_hash ON t_transfers_%s (status, created_at, tx_hash);
-	`, db.suffix))
+	CREATE INDEX idx_transfers_%s_status_date_from_tx_hash ON t_transfers_%s (status, created_at, tx_hash);
+	`, suffix, db.suffix))
 	if err != nil {
 		return err
 	}

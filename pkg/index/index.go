@@ -229,6 +229,8 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			startBlock = ev.LastBlock
 		}
 
+		log.Default().Println("indexing block: ", startBlock, " to block: ", blockNum, " ...")
+
 		query := ethereum.FilterQuery{
 			FromBlock: big.NewInt(startBlock),
 			ToBlock:   big.NewInt(blockNum),

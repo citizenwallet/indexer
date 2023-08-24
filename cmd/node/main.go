@@ -128,6 +128,7 @@ func main() {
 
 	for err := range quitAck {
 		if err != nil {
+			sentry.CaptureException(err)
 			log.Fatal(err)
 		}
 	}

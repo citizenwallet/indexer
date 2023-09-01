@@ -221,8 +221,19 @@ func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
 
 	// insert the confirmed transfer
 	_, err = db.db.Exec(fmt.Sprintf(`
-	INSERT OR REPLACE INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+	INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'success')
+	ON CONFLICT (hash) DO UPDATE SET 
+		tx_hash = EXCLUDED.tx_hash,
+		token_id = EXCLUDED.token_id,
+		created_at = EXCLUDED.created_at,
+		from_to_addr = EXCLUDED.from_to_addr,
+		from_addr = EXCLUDED.from_addr,
+		to_addr = EXCLUDED.to_addr,
+		nonce = EXCLUDED.nonce,
+		value = EXCLUDED.value,
+		data = EXCLUDED.data,
+		status = EXCLUDED.status;
 	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data)
 
 	return err

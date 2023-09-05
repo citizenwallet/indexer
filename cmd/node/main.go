@@ -11,6 +11,7 @@ import (
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/internal/services/oprequest"
+	"github.com/citizenwallet/indexer/internal/services/webhook"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/router"
 	"github.com/getsentry/sentry-go"
@@ -126,8 +127,11 @@ func main() {
 
 	log.Default().Println("listening on port: ", *port)
 
+	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName)
+
 	for err := range quitAck {
 		if err != nil {
+			w.NotifyError(ctx, err)
 			sentry.CaptureException(err)
 			log.Fatal(err)
 		}

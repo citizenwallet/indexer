@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	RPCChainName          string `env:"RPC_CHAIN_NAME,default=ethereum"`
 	RPCURL                string `env:"RPC_URL,default=http://localhost:8545"`
 	RPCWSURL              string `env:"RPC_WS_URL,default=ws://localhost:8545"`
 	BundlerRPCURL         string `env:"ERC4337_RPC_URL,required"`
@@ -26,6 +27,7 @@ type Config struct {
 	DBName                string `env:"POSTGRES_DB,required"`
 	DBHost                string `env:"POSTGRES_HOST,required"`
 	DBReaderHost          string `env:"POSTGRES_READER_HOST,required"`
+	DiscordURL            string `env:"DISCORD_URL,required"`
 }
 
 func New(ctx context.Context, envpath string) (*Config, error) {

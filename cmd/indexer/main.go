@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/internal/services/oprequest"
+	"github.com/citizenwallet/indexer/internal/services/webhook"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/getsentry/sentry-go"
 )
@@ -108,13 +110,21 @@ func main() {
 	}
 	defer i.Close()
 
+	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName)
+
 	go func() {
+		w.Notify(ctx, fmt.Sprintf("⚙️ indexing started for contract: %s", *contract))
+
 		quitAck <- i.IndexERC20From(*contract, *startBlk)
 	}()
 
 	for err := range quitAck {
 		if err != nil {
+			w.NotifyError(ctx, err)
 			log.Fatal(err)
 		}
 	}
+
+	w.Notify(ctx, fmt.Sprintf("✅ indexing done for contract: %s", *contract))
+	log.Default().Println("indexing done, shutting down...")
 }

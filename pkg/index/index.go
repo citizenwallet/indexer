@@ -484,6 +484,19 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 					}
 
 					if !exists {
+						// there can be optimistic transactions already in the db
+						// attempt to find a similar transaction
+						exists, err = txdb.TransferSimilarExists(tx.From, tx.To, tx.Value.String())
+						if err != nil {
+							return err
+						}
+
+						if exists {
+							log.Default().Println("found a potential optimistic transaction: ", tx.From, tx.To, tx.Value.String())
+						}
+					}
+
+					if !exists {
 						// generate a hash
 						tx.GenerateHash(i.chainID.Int64())
 

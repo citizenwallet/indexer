@@ -263,6 +263,21 @@ func (db *TransferDB) TransferExists(txHash string) (bool, error) {
 	return count > 0, nil
 }
 
+// TransferSimilarExists returns true if the transfer tx_hash is empty and to, from and value match in the db
+func (db *TransferDB) TransferSimilarExists(from, to, value string) (bool, error) {
+	var count int
+	row := db.rdb.QueryRow(fmt.Sprintf(`
+	SELECT COUNT(*) FROM t_transfers_%s WHERE tx_hash = '' AND from_addr = $1 AND to_addr = $2 AND value = $3
+	`, db.suffix), from, to, value)
+
+	err := row.Scan(&count)
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 // RemoveSendingTransfer removes a sending transfer from the db
 func (db *TransferDB) RemoveSendingTransfer(hash string) error {
 	_, err := db.db.Exec(fmt.Sprintf(`

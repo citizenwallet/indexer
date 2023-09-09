@@ -109,20 +109,7 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 
 		// go through sending transfers
 		for _, tx := range txs {
-			if tx.Status != indexer.TransferStatusSending {
-				continue
-			}
-
-			if time.Now().UTC().Before(tx.CreatedAt.UTC().Add(30 * time.Second)) {
-				// give 30 seconds to submit before deleting
-				continue
-			}
-
-			// not normal, should not stay this long in sending status
-			log.Default().Println("cleaning up sending transfer: ", tx.Hash)
-
-			// remove the transaction from the db
-			err = txdb.RemoveSendingTransfer(tx.Hash)
+			err = cleanUpSendingTx(txdb, tx)
 			if err != nil {
 				return err
 			}
@@ -134,11 +121,12 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 				continue
 			}
 
-			r, err := r.bundler.GetUserOperationByHash(tx.Hash)
+			op, err := r.bundler.GetUserOperationByHash(tx.Hash)
 			if err != nil && err.Error() != ErrInvalidUserOp.Error() {
 				// probably a network error
 				return ErrReconcilingRecoverable
 			}
+
 			if err != nil && err.Error() == ErrInvalidUserOp.Error() {
 				// probably an unsubmitted user op
 				log.Default().Println("user op not found: ", err.Error())
@@ -158,30 +146,61 @@ func (r *Reconciler) Process(evs []*indexer.Event) error {
 				continue
 			}
 
-			tx.TxHash = r.TransactionHash
-
-			// check if this tx_hash already exists
-			exists, err := txdb.TransferExists(r.TransactionHash)
-			if err != nil {
-				return err
-			}
-
-			if exists {
-				// set hash
-				err = txdb.ReconcileTxHash(tx)
-				if err != nil {
-					return err
-				}
-
-				continue
-			}
-
-			// set tx_hash
-			err = txdb.SetTxHash(r.TransactionHash, tx.Hash)
+			err = reconcilePendingTx(txdb, op, tx)
 			if err != nil {
 				return err
 			}
 		}
+	}
+
+	return nil
+}
+
+func cleanUpSendingTx(txdb *db.TransferDB, tx *indexer.Transfer) error {
+	if tx.Status != indexer.TransferStatusSending {
+		return nil
+	}
+
+	if time.Now().UTC().Before(tx.CreatedAt.UTC().Add(30 * time.Second)) {
+		// give 30 seconds to submit before deleting
+		return nil
+	}
+
+	// not normal, should not stay this long in sending status
+	log.Default().Println("cleaning up sending transfer: ", tx.Hash)
+
+	// remove the transaction from the db
+	err := txdb.RemoveSendingTransfer(tx.Hash)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func reconcilePendingTx(txdb *db.TransferDB, op *bundler.UserOperationResult, tx *indexer.Transfer) error {
+	tx.TxHash = op.TransactionHash
+
+	// check if this tx_hash already exists
+	exists, err := txdb.TransferExists(op.TransactionHash)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		// set hash
+		err = txdb.ReconcileTxHash(tx)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	// set tx_hash
+	err = txdb.SetTxHash(op.TransactionHash, tx.Hash)
+	if err != nil {
+		return err
 	}
 
 	return nil

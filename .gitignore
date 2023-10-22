@@ -26,3 +26,6 @@ go.work
 
 # postgres
 data
+
+# firebase
+firebase.json

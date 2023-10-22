@@ -10,6 +10,7 @@ import (
 	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
+	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/internal/services/oprequest"
 	"github.com/citizenwallet/indexer/internal/services/webhook"
 	"github.com/citizenwallet/indexer/pkg/index"
@@ -33,6 +34,8 @@ func main() {
 	rate := flag.Int("rate", 99, "rate to sync (default: 99)")
 
 	evmtype := flag.String("evm", string(index.EVMTypeEthereum), "which evm to use (default: ethereum)")
+
+	fbpath := flag.String("fbpath", "firebase.json", "path to firebase credentials")
 
 	flag.Parse()
 
@@ -105,10 +108,12 @@ func main() {
 
 	quitAck := make(chan error)
 
+	fb := firebase.NewPushService(ctx, *fbpath)
+
 	if !*onlyAPI {
 		log.Default().Println("starting index service...")
 
-		i, err := index.New(*rate, chid, d, evm)
+		i, err := index.New(*rate, chid, d, evm, fb)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -123,7 +128,7 @@ func main() {
 
 	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret)
 
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, bu)
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, bu, fb)
 
 	go func() {
 		quitAck <- api.Start(*port)

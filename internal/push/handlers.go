@@ -7,21 +7,19 @@ import (
 	"github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
-	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/go-chi/chi/v5"
 )
 
 type Service struct {
-	db       *db.DB
-	firebase *firebase.PushService
-	comm     *ethrequest.Community
+	db   *db.DB
+	comm *ethrequest.Community
 }
 
-func NewService(db *db.DB, firebase *firebase.PushService) *Service {
+func NewService(db *db.DB, comm *ethrequest.Community) *Service {
 	return &Service{
-		db:       db,
-		firebase: firebase,
+		db:   db,
+		comm: comm,
 	}
 }
 

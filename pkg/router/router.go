@@ -65,7 +65,7 @@ func (r *Router) Start(port int) error {
 	l := logs.NewService(r.chainId, r.db, comm)
 	ev := events.NewService(r.db)
 	pr := profiles.NewService(r.b, comm)
-	pu := push.NewService(r.db, r.firebase)
+	pu := push.NewService(r.db, comm)
 
 	// configure routes
 	cr.Route("/logs/transfers", func(cr chi.Router) {

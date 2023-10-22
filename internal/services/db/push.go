@@ -80,7 +80,7 @@ func (db *PushTokenDB) AddToken(p *indexer.PushToken) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
 	INSERT INTO t_push_token_%s (token, account, created_at, updated_at)
 	VALUES ($1, $2, $3, $4)
-	ON CONFLICT(hash) DO UPDATE SET
+	ON CONFLICT(token, account) DO UPDATE SET
 		updated_at = excluded.updated_at
 	`, db.suffix), p.Token, p.Account, now, now)
 

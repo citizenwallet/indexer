@@ -109,6 +109,14 @@ func (db *TransferDB) CreateTransferTableIndexes() error {
 		return err
 	}
 
+	// finding optimistic transactions
+	_, err = db.db.Exec(fmt.Sprintf(`
+		CREATE INDEX idx_transfers_%s_to_addr_from_addr_value ON t_transfers_%s (to_addr, from_addr, value);
+		`, suffix, db.suffix))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -179,11 +187,11 @@ func (db *TransferDB) SetStatus(status, hash string) error {
 }
 
 // SetStatusFromTxHash sets the status of a transfer to pending
-func (db *TransferDB) SetStatusFromTxHash(status, txhash string) error {
+func (db *TransferDB) SetStatusFromHash(status, hash string) error {
 	// if status is success, don't update
 	_, err := db.db.Exec(fmt.Sprintf(`
-	UPDATE t_transfers_%s SET status = $1 WHERE tx_hash = $2 AND status != 'success'
-	`, db.suffix), status, txhash)
+	UPDATE t_transfers_%s SET status = $1 WHERE hash = $2 AND status != 'success'
+	`, db.suffix), status, hash)
 
 	return err
 }
@@ -209,7 +217,7 @@ func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
 	// handle the scenario with multiple transfers with the same tx_hash
 
 	// we can assume that the reason there are multiple transfers with the same tx_hash
-	// is because one was inserted due tu indexing, meaning it is confirmed
+	// is because one was inserted due to indexing, meaning it is confirmed
 
 	// delete all transfers with a given tx_hash
 	_, err = db.db.Exec(fmt.Sprintf(`
@@ -248,12 +256,21 @@ func (db *TransferDB) SetTxHash(txHash, hash string) error {
 	return err
 }
 
+// SetTxHash sets the tx hash of a transfer with no tx_hash
+func (db *TransferDB) ReconcileTx(txHash, hash string, nonce int64) error {
+	_, err := db.db.Exec(fmt.Sprintf(`
+	UPDATE t_transfers_%s SET tx_hash = $1, nonce = $2, status = $3 WHERE hash = $4 AND tx_hash = ''
+	`, db.suffix), txHash, nonce, string(indexer.TransferStatusSuccess), hash)
+
+	return err
+}
+
 // TransferExists returns true if the transfer tx_hash exists in the db
-func (db *TransferDB) TransferExists(txHash string) (bool, error) {
+func (db *TransferDB) TransferExists(txHash, from, to, value string) (bool, error) {
 	var count int
 	row := db.rdb.QueryRow(fmt.Sprintf(`
-	SELECT COUNT(*) FROM t_transfers_%s WHERE tx_hash = $1
-	`, db.suffix), txHash)
+	SELECT COUNT(*) FROM t_transfers_%s WHERE tx_hash = $1 AND from_addr = $2 AND to_addr = $3 AND value = $4
+	`, db.suffix), txHash, from, to, value)
 
 	err := row.Scan(&count)
 	if err != nil {
@@ -261,6 +278,21 @@ func (db *TransferDB) TransferExists(txHash string) (bool, error) {
 	}
 
 	return count > 0, nil
+}
+
+// TransferSimilarExists returns true if the transfer tx_hash is empty and to, from and value match in the db
+func (db *TransferDB) TransferSimilarExists(from, to, value string) (string, error) {
+	var hash string
+	row := db.rdb.QueryRow(fmt.Sprintf(`
+	SELECT hash FROM t_transfers_%s WHERE tx_hash = '' AND from_addr = $1 AND to_addr = $2 AND value = $3
+	`, db.suffix), from, to, value)
+
+	err := row.Scan(&hash)
+	if err != nil {
+		return "", err
+	}
+
+	return hash, nil
 }
 
 // RemoveSendingTransfer removes a sending transfer from the db

@@ -54,6 +54,6 @@ func (t *Transfer) CombineFromTo() string {
 
 // generate hash for transfer using chainID, tokenID, nonce, from, to, value
 func (t *Transfer) GenerateHash(chainID int64) {
-	hash := crypto.Keccak256Hash([]byte(fmt.Sprintf("%d_%d_%s_%s_%s_%d", chainID, t.TokenID, t.CreatedAt, t.From, t.To, t.Value)))
+	hash := crypto.Keccak256Hash([]byte(fmt.Sprintf("%d_%d_%s_%s_%s_%d_%d", chainID, t.TokenID, t.CreatedAt, t.From, t.To, t.Nonce, t.Value)))
 	t.Hash = hash.Hex()
 }

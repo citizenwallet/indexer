@@ -104,7 +104,7 @@ func main() {
 
 	log.Default().Println("starting index service...")
 
-	i, err := index.New(*rate, chid, d, evm, ctx, conf.BundlerRPCURL, conf.BundlerOriginHeader)
+	i, err := index.New(*rate, chid, d, evm)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -119,6 +119,10 @@ func main() {
 	}()
 
 	for err := range quitAck {
+		if err == nil {
+			break
+		}
+
 		if err != nil {
 			w.NotifyError(ctx, err)
 			log.Fatal(err)

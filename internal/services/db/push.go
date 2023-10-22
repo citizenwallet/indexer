@@ -39,7 +39,7 @@ func (db *PushTokenDB) CloseR() error {
 func (db *PushTokenDB) CreatePushTable() error {
 	_, err := db.db.Exec(fmt.Sprintf(`
 	CREATE TABLE t_push_token_%s(
-		token TEXT NOT NULL PRIMARY KEY,
+		token TEXT NOT NULL,
 		account text NOT NULL,
 		created_at timestamp NOT NULL,
 		updated_at timestamp NOT NULL,

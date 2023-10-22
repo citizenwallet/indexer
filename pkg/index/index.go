@@ -102,10 +102,10 @@ func (i *Indexer) Start() error {
 		return err
 	}
 
-	err = i.re.Process(evs)
-	if err != nil && err != ErrReconcilingRecoverable {
-		return err
-	}
+	// err = i.re.Process(evs)
+	// if err != nil && err != ErrReconcilingRecoverable {
+	// 	return err
+	// }
 
 	return i.Process(evs, curr)
 }
@@ -301,12 +301,27 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 				newTxs := []*indexer.Transfer{}
 				for _, tx := range txs {
 					// check if the transfer already exists
-					exists, err := txdb.TransferExists(tx.TxHash)
+					exists, err := txdb.TransferExists(tx.TxHash, tx.From, tx.To, tx.Value.String())
 					if err != nil {
 						return err
 					}
 
 					if !exists {
+						// there can be optimistic transactions already in the db
+						// attempt to find a similar transaction
+						hash, _ := txdb.TransferSimilarExists(tx.From, tx.To, tx.Value.String())
+
+						if hash != "" {
+							log.Default().Println("optimistic tx found: ", hash, " ", tx.Nonce)
+							// there is an optimistic transaction, set its tx_hash and status
+							err = txdb.ReconcileTx(tx.TxHash, hash, tx.Nonce)
+							if err != nil {
+								return err
+							}
+
+							continue
+						}
+
 						// generate a hash
 						tx.GenerateHash(i.chainID.Int64())
 
@@ -314,7 +329,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 						continue
 					}
 
-					err = txdb.SetStatusFromTxHash(string(indexer.TransferStatusSuccess), tx.TxHash)
+					err = txdb.SetStatusFromHash(string(indexer.TransferStatusSuccess), tx.Hash)
 					if err != nil {
 						return err
 					}
@@ -478,7 +493,7 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 				newTxs := []*indexer.Transfer{}
 				for _, tx := range txs {
 					// check if the transfer already exists
-					exists, err := txdb.TransferExists(tx.TxHash)
+					exists, err := txdb.TransferExists(tx.TxHash, tx.From, tx.To, tx.Value.String())
 					if err != nil {
 						return err
 					}
@@ -486,17 +501,19 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 					if !exists {
 						// there can be optimistic transactions already in the db
 						// attempt to find a similar transaction
-						exists, err = txdb.TransferSimilarExists(tx.From, tx.To, tx.Value.String())
-						if err != nil {
-							return err
+						hash, _ := txdb.TransferSimilarExists(tx.From, tx.To, tx.Value.String())
+
+						if hash != "" {
+							log.Default().Println("optimistic tx found: ", hash, " ", tx.Nonce)
+							// there is an optimistic transaction, set its tx_hash and status
+							err = txdb.ReconcileTx(tx.TxHash, hash, tx.Nonce)
+							if err != nil {
+								return err
+							}
+
+							continue
 						}
 
-						if exists {
-							log.Default().Println("found a potential optimistic transaction: ", tx.From, tx.To, tx.Value.String())
-						}
-					}
-
-					if !exists {
 						// generate a hash
 						tx.GenerateHash(i.chainID.Int64())
 
@@ -504,7 +521,7 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 						continue
 					}
 
-					err = txdb.SetStatusFromTxHash(string(indexer.TransferStatusSuccess), tx.TxHash)
+					err = txdb.SetStatusFromHash(string(indexer.TransferStatusSuccess), tx.Hash)
 					if err != nil {
 						return err
 					}
@@ -545,6 +562,7 @@ func getERC20Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexe
 		CreatedAt: blktime,
 		From:      trsf.From.Hex(),
 		To:        trsf.To.Hex(),
+		Nonce:     int64(trsf.Raw.Index),
 		Value:     trsf.Value,
 		Status:    indexer.TransferStatusSuccess,
 	}, nil
@@ -567,6 +585,7 @@ func getERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*index
 		CreatedAt: blktime,
 		From:      trsf.From.Hex(),
 		To:        trsf.To.Hex(),
+		Nonce:     int64(trsf.Raw.Index),
 		Value:     common.Big1,
 		Status:    indexer.TransferStatusSuccess,
 	}, nil
@@ -595,6 +614,7 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 			CreatedAt: blktime,
 			From:      trsf.From.Hex(),
 			To:        trsf.To.Hex(),
+			Nonce:     int64(trsf.Raw.Index),
 			Value:     trsf.Value,
 			Status:    indexer.TransferStatusSuccess,
 		})
@@ -620,6 +640,7 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 				CreatedAt: blktime,
 				From:      trsf.From.Hex(),
 				To:        trsf.To.Hex(),
+				Nonce:     int64(trsf.Raw.Index),
 				Value:     trsf.Values[i],
 				Status:    indexer.TransferStatusSuccess,
 			})

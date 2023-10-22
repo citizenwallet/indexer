@@ -182,7 +182,7 @@ func reconcilePendingTx(txdb *db.TransferDB, op *bundler.UserOperationResult, tx
 	tx.TxHash = op.TransactionHash
 
 	// check if this tx_hash already exists
-	exists, err := txdb.TransferExists(op.TransactionHash)
+	exists, err := txdb.TransferExists(op.TransactionHash, tx.From, tx.To, tx.Value.String())
 	if err != nil {
 		return err
 	}

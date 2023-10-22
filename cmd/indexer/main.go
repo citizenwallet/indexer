@@ -119,6 +119,10 @@ func main() {
 	}()
 
 	for err := range quitAck {
+		if err == nil {
+			break
+		}
+
 		if err != nil {
 			w.NotifyError(ctx, err)
 			log.Fatal(err)

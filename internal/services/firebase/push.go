@@ -47,6 +47,13 @@ func (s *PushService) Send(push *indexer.PushMessage) ([]string, error) {
 			Title: push.Title,
 			Body:  push.Body,
 		},
+		APNS: &messaging.APNSConfig{
+			Payload: &messaging.APNSPayload{
+				Aps: &messaging.Aps{
+					Sound: "tx_notification.wav",
+				},
+			},
+		},
 	}
 
 	br, err := s.Messaging.SendEachForMulticast(s.ctx, message)

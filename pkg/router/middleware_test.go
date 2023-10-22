@@ -17,7 +17,7 @@ func TestSignatureVerification(t *testing.T) {
 
 	t.Run("legacy", func(t *testing.T) {
 		// make a v0 signed body
-		data := []byte("hello world")
+		data := []byte("eyJoZWxsbyI6IndvcmxkIn0") // base64: '{"hello":"world"}'
 
 		body := signedBody{
 			Data:     data,
@@ -43,7 +43,7 @@ func TestSignatureVerification(t *testing.T) {
 
 	t.Run("v2", func(t *testing.T) {
 		// make a v0 signed body
-		data := []byte("hello world")
+		data := []byte("eyJoZWxsbyI6IndvcmxkIn0") // base64: '{"hello":"world"}'
 
 		body := signedBody{
 			Data:     data,

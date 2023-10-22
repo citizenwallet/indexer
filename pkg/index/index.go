@@ -52,22 +52,14 @@ type Indexer struct {
 	chainID *big.Int
 	db      *db.DB
 	evm     EVMRequester
-
-	re *Reconciler
 }
 
-func New(rate int, chainID *big.Int, db *db.DB, evm EVMRequester, ctx context.Context, rpcUrl, origin string) (*Indexer, error) {
-	re, err := NewReconciler(rate, chainID, db, ctx, rpcUrl, origin)
-	if err != nil {
-		return nil, err
-	}
-
+func New(rate int, chainID *big.Int, db *db.DB, evm EVMRequester) (*Indexer, error) {
 	return &Indexer{
 		rate:    rate,
 		chainID: chainID,
 		db:      db,
 		evm:     evm,
-		re:      re,
 	}, nil
 }
 
@@ -102,16 +94,11 @@ func (i *Indexer) Start() error {
 		return err
 	}
 
-	// err = i.re.Process(evs)
-	// if err != nil && err != ErrReconcilingRecoverable {
-	// 	return err
-	// }
-
 	return i.Process(evs, curr)
 }
 
 func (e *Indexer) Close() {
-	e.re.Close()
+	//
 }
 
 // Background starts an indexer service in the background

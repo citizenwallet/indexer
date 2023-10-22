@@ -28,6 +28,8 @@ func main() {
 
 	ws := flag.Bool("ws", false, "enable websocket")
 
+	onlyAPI := flag.Bool("onlyApi", false, "only run api service")
+
 	rate := flag.Int("rate", 99, "rate to sync (default: 99)")
 
 	evmtype := flag.String("evm", string(index.EVMTypeEthereum), "which evm to use (default: ethereum)")
@@ -103,17 +105,19 @@ func main() {
 
 	quitAck := make(chan error)
 
-	log.Default().Println("starting index service...")
+	if !*onlyAPI {
+		log.Default().Println("starting index service...")
 
-	i, err := index.New(*rate, chid, d, evm)
-	if err != nil {
-		log.Fatal(err)
+		i, err := index.New(*rate, chid, d, evm)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer i.Close()
+
+		go func() {
+			quitAck <- i.Background(*sync)
+		}()
 	}
-	defer i.Close()
-
-	go func() {
-		quitAck <- i.Background(*sync)
-	}()
 
 	log.Default().Println("starting api service...")
 

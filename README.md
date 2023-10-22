@@ -152,6 +152,7 @@ Body
     "data": data, // base64 encoded data
     "encoding": "base64", // how is the data encoded
     "expiry": expiry,
+    "version": 2
 }
 ```
 
@@ -178,6 +179,7 @@ Body
     "data": data, // base64 encoded data
     "encoding": "base64", // how is the data encoded
     "expiry": expiry,
+    "version": 2
 }
 ```
 
@@ -247,6 +249,7 @@ Multi-part form `body`
     "data": data, // base64 encoded data
     "encoding": "base64", // how is the data encoded
     "expiry": expiry,
+    "version": 2
 }
 ```
 
@@ -275,6 +278,7 @@ Body
     "data": data, // base64 encoded data
     "encoding": "base64", // how is the data encoded
     "expiry": expiry,
+    "version": 2
 }
 ```
 

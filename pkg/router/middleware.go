@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 	"sync"
@@ -117,6 +118,7 @@ type signedBody struct {
 	Data     []byte       `json:"data"`
 	Encoding BodyEncoding `json:"encoding"`
 	Expiry   int64        `json:"expiry"`
+	Version  int          `json:"version"`
 }
 
 // withSignature is a middleware that checks the signature of the request against the request body
@@ -144,9 +146,19 @@ func withSignature(h http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// check signature
-		if !verifySignature(req, addr, signature) {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
+		switch req.Version {
+		case 0:
+			// LEGACY: remove 3 months from 22/10/2023
+			// reason: verifySignature only verifies the data and not the entire request, the expiry time can be manipulated
+			if !verifySignature(req, addr, signature) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		default:
+			if !verifyV2Signature(req, addr, signature) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 		}
 
 		r.Body = io.NopCloser(strings.NewReader(string(req.Data)))
@@ -185,9 +197,19 @@ func withMultiPartSignature(h http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// check signature
-		if !verifySignature(req, addr, signature) {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
+		switch req.Version {
+		case 0:
+			// LEGACY: remove 3 months from 22/10/2023
+			// reason: verifySignature only verifies the data and not the entire request, the expiry time can be manipulated
+			if !verifySignature(req, addr, signature) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		default:
+			if !verifyV2Signature(req, addr, signature) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 		}
 
 		r.MultipartForm.Value["body"] = []string{string(req.Data)}
@@ -199,7 +221,15 @@ func withMultiPartSignature(h http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
+// verifySignature verifies the signature of the request against the request body
+//
+// Deprecated: verifySignature incorrectly verifies only the data and not the entire request
 func verifySignature(req signedBody, addr string, signature string) bool {
+	// verify that the signature is a legacy signature
+	if req.Version != 0 {
+		return false
+	}
+
 	// verify if the signature has expired
 	if req.Expiry < time.Now().UTC().Unix() {
 		return false
@@ -245,4 +275,81 @@ func verifySignature(req signedBody, addr string, signature string) bool {
 
 	// verify the signature
 	return ns.Verify(h.Bytes(), pubkey)
+}
+
+// verifyV2Signature verifies the signature of the request against the entire request body
+func verifyV2Signature(req signedBody, addr string, signature string) bool {
+	// verify that the signature is v2
+	if req.Version != 2 {
+		return false
+	}
+
+	// verify if the signature has expired
+	if req.Expiry < time.Now().UTC().Unix() {
+		return false
+	}
+
+	// hash the entire request data
+	b, err := json.Marshal(req)
+	if err != nil {
+		return false
+	}
+
+	h := crypto.Keccak256Hash(b)
+
+	// decode the signature
+	sig, err := hexutil.Decode(signature)
+	if err != nil {
+		return false
+	}
+
+	// recover the public key from the signature
+	pubkey, _, err := ecdsa.RecoverCompact(sig, h.Bytes())
+	if err != nil {
+		return false
+	}
+
+	// derive the address from the public key
+	address := crypto.PubkeyToAddress(*pubkey.ToECDSA())
+
+	recoveredaddr := address.Hex()
+
+	// the address in the request must match the address derived from the signature
+	if strings.ToLower(recoveredaddr) != strings.ToLower(addr) {
+		return false
+	}
+
+	// create ModNScalars from the signature manually
+	sr, ss := secp256k1.ModNScalar{}, secp256k1.ModNScalar{}
+
+	// set the byteslices manually from the signature
+	sr.SetByteSlice(sig[1:33])
+	ss.SetByteSlice(sig[33:65])
+
+	// create a new signature from the ModNScalars
+	ns := ecdsa.NewSignature(&sr, &ss)
+	if err != nil {
+		return false
+	}
+
+	// verify the signature
+	return ns.Verify(h.Bytes(), pubkey)
+}
+
+// compactSignature gets the v, r, and s values and compacts them into a 65 byte array
+// 0x - padding
+// v - 1 byte
+// r - 32 bytes
+// s - 32 bytes
+func compactSignature(sig []byte) string {
+	rsig := make([]byte, 65)
+
+	// v is the last byte of the signature plus 27
+	integer := big.NewInt(0).SetBytes(sig[64:65]).Uint64()
+
+	rsig[0] = byte(integer + 27)
+	copy(rsig[1:33], sig[0:32])
+	copy(rsig[33:65], sig[32:64])
+
+	return hexutil.Encode(rsig)
 }

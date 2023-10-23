@@ -28,4 +28,5 @@ type Event struct {
 	Standard   Standard   `json:"standard"`
 	Name       string     `json:"name"`
 	Symbol     string     `json:"symbol"`
+	Decimals   int64      `json:"decimals"`
 }

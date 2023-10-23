@@ -96,7 +96,7 @@ func (s *Service) AddEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// add event to database
-	err = s.db.EventDB.AddEvent(ev.Contract, ev.State, ev.StartBlock, ev.LastBlock, ev.Standard, ev.Name, ev.Symbol)
+	err = s.db.EventDB.AddEvent(ev.Contract, ev.State, ev.StartBlock, ev.LastBlock, ev.Standard, ev.Name, ev.Symbol, ev.Decimals)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

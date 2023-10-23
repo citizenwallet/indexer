@@ -47,6 +47,7 @@ func (db *EventDB) CreateEventsTable(suffix string) error {
 		standard text NOT NULL,
 		name text NOT NULL,
 		symbol text NOT NULL,
+		decimals integer NOT NULL DEFAULT 6,
 		UNIQUE (contract, standard)
 	);
 	`, suffix))
@@ -84,10 +85,10 @@ func (db *EventDB) CreateEventsTableIndexes(suffix string) error {
 func (db *EventDB) GetEvent(contract string, standard indexer.Standard) (*indexer.Event, error) {
 	var event indexer.Event
 	err := db.rdb.QueryRow(fmt.Sprintf(`
-	SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol
+	SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol, decimals
 	FROM t_events_%s
 	WHERE contract = $1 AND standard = $2
-	`, db.suffix), contract, standard).Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Standard, &event.Name, &event.Symbol)
+	`, db.suffix), contract, standard).Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Standard, &event.Name, &event.Symbol, &event.Decimals)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +99,7 @@ func (db *EventDB) GetEvent(contract string, standard indexer.Standard) (*indexe
 // GetEvents gets all events from the db
 func (db *EventDB) GetEvents() ([]*indexer.Event, error) {
 	rows, err := db.rdb.Query(fmt.Sprintf(`
-    SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol
+    SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol, decimals
     FROM t_events_%s
     ORDER BY created_at ASC
     `, db.suffix))
@@ -110,7 +111,7 @@ func (db *EventDB) GetEvents() ([]*indexer.Event, error) {
 	events := []*indexer.Event{}
 	for rows.Next() {
 		var event indexer.Event
-		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Standard, &event.Name, &event.Symbol)
+		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Standard, &event.Name, &event.Symbol, &event.Decimals)
 		if err != nil {
 			return nil, err
 		}
@@ -124,7 +125,7 @@ func (db *EventDB) GetEvents() ([]*indexer.Event, error) {
 // GetOutdatedEvents gets all queued events from the db sorted by created_at
 func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*indexer.Event, error) {
 	rows, err := db.rdb.Query(fmt.Sprintf(`
-    SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol
+    SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol, decimals
     FROM t_events_%s
     WHERE last_block < $1
     ORDER BY created_at ASC
@@ -137,7 +138,7 @@ func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*indexer.Event, error)
 	events := []*indexer.Event{}
 	for rows.Next() {
 		var event indexer.Event
-		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Standard, &event.Name, &event.Symbol)
+		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Standard, &event.Name, &event.Symbol, &event.Decimals)
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +152,7 @@ func (db *EventDB) GetOutdatedEvents(currentBlk int64) ([]*indexer.Event, error)
 // GetQueuedEvents gets all queued events from the db sorted by created_at
 func (db *EventDB) GetQueuedEvents() ([]*indexer.Event, error) {
 	rows, err := db.rdb.Query(fmt.Sprintf(`
-    SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol
+    SELECT contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol, decimals
     FROM t_events_%s
     WHERE state = $1
     ORDER BY created_at ASC
@@ -164,7 +165,7 @@ func (db *EventDB) GetQueuedEvents() ([]*indexer.Event, error) {
 	events := []*indexer.Event{}
 	for rows.Next() {
 		var event indexer.Event
-		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Standard, &event.Name, &event.Symbol)
+		err = rows.Scan(&event.Contract, &event.State, &event.CreatedAt, &event.UpdatedAt, &event.StartBlock, &event.LastBlock, &event.Standard, &event.Name, &event.Symbol, &event.Decimals)
 		if err != nil {
 			return nil, err
 		}
@@ -198,12 +199,12 @@ func (db *EventDB) SetEventLastBlock(contract string, standard indexer.Standard,
 }
 
 // AddEvent adds an event to the db
-func (db *EventDB) AddEvent(contract string, state indexer.EventState, startBlk, lastBlk int64, std indexer.Standard, name, symbol string) error {
+func (db *EventDB) AddEvent(contract string, state indexer.EventState, startBlk, lastBlk int64, std indexer.Standard, name, symbol string, decimals int64) error {
 	t := time.Now()
 
 	_, err := db.db.Exec(fmt.Sprintf(`
-    INSERT INTO t_events_%s (contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    INSERT INTO t_events_%s (contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol, decimals)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     ON CONFLICT(contract, standard) DO UPDATE SET
         state = excluded.state,
         updated_at = excluded.updated_at,
@@ -211,7 +212,8 @@ func (db *EventDB) AddEvent(contract string, state indexer.EventState, startBlk,
         last_block = excluded.last_block,
         name = excluded.name,
         symbol = excluded.symbol
-    `, db.suffix), contract, state, t, t, startBlk, lastBlk, std, name, symbol)
+		decimals = excluded.decimals
+    `, db.suffix), contract, state, t, t, startBlk, lastBlk, std, name, symbol, decimals)
 
 	return err
 }

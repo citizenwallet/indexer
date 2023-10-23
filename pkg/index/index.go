@@ -3,6 +3,7 @@ package index
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math/big"
 	"strings"
@@ -341,47 +342,55 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 					}
 				}
 
-				accTokens := map[string][]*indexer.PushToken{}
+				go func() {
+					accTokens := map[string][]*indexer.PushToken{}
 
-				messages := []*indexer.PushMessage{}
+					messages := []*indexer.PushMessage{}
 
-				for _, tx := range txs {
-					if accTokens[tx.To] == nil {
-						// get the push tokens for the recipient
-						pt, err := ptdb.GetAccountTokens(tx.To)
-						if err != nil {
-							return err
-						}
-
-						if len(pt) == 0 {
-							// no push tokens for this account
+					for _, tx := range txs {
+						if tx.Status != indexer.TransferStatusSuccess {
 							continue
 						}
 
-						accTokens[tx.From] = pt
-					}
+						if _, ok = accTokens[tx.To]; !ok {
+							// get the push tokens for the recipient
+							pt, err := ptdb.GetAccountTokens(tx.To)
+							if err != nil {
+								return
+							}
 
-					messages = append(messages, indexer.NewAnonymousPushMessage(accTokens[tx.To], ev.Name, tx.Value.String(), ev.Symbol))
-				}
+							if len(pt) == 0 {
+								// no push tokens for this account
+								continue
+							}
 
-				if len(messages) > 0 {
-					for _, push := range messages {
-						badTokens, err := i.fb.Send(push)
-						if err != nil {
-							return err
+							accTokens[tx.To] = pt
 						}
 
-						if len(badTokens) > 0 {
-							// remove the bad tokens
-							for _, token := range badTokens {
-								err = ptdb.RemovePushToken(token)
-								if err != nil {
-									return err
+						value := tx.ToRounded(ev.Decimals)
+
+						messages = append(messages, indexer.NewAnonymousPushMessage(accTokens[tx.To], ev.Name, fmt.Sprintf("%.2f", value), ev.Symbol))
+					}
+
+					if len(messages) > 0 {
+						for _, push := range messages {
+							badTokens, err := i.fb.Send(push)
+							if err != nil {
+								continue
+							}
+
+							if len(badTokens) > 0 {
+								// remove the bad tokens
+								for _, token := range badTokens {
+									err = ptdb.RemovePushToken(token)
+									if err != nil {
+										continue
+									}
 								}
 							}
 						}
 					}
-				}
+				}()
 			}
 		}
 

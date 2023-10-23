@@ -18,8 +18,9 @@ type DB struct {
 	db      *sql.DB
 	rdb     *sql.DB
 
-	EventDB    *EventDB
-	TransferDB map[string]*TransferDB
+	EventDB     *EventDB
+	TransferDB  map[string]*TransferDB
+	PushTokenDB map[string]*PushTokenDB
 }
 
 // NewDB instantiates a new DB
@@ -81,6 +82,7 @@ func NewDB(chainID *big.Int, username, password, name, host, rhost string) (*DB,
 	}
 
 	txdb := map[string]*TransferDB{}
+	ptdb := map[string]*PushTokenDB{}
 
 	evs, err := eventDB.GetEvents()
 	if err != nil {
@@ -115,9 +117,37 @@ func NewDB(chainID *big.Int, username, password, name, host, rhost string) (*DB,
 				return nil, err
 			}
 		}
+
+		log.Default().Println("creating push token db for: ", name)
+
+		ptdb[name], err = NewPushTokenDB(db, rdb, name)
+		if err != nil {
+			return nil, err
+		}
+
+		// check if db exists before opening, since we use rwc mode
+		exists, err = d.PushTokenTableExists(name)
+		if err != nil {
+			return nil, err
+		}
+
+		if !exists {
+			// create table
+			err = ptdb[name].CreatePushTable()
+			if err != nil {
+				return nil, err
+			}
+
+			// create indexes
+			err = ptdb[name].CreatePushTableIndexes()
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	d.TransferDB = txdb
+	d.PushTokenDB = ptdb
 
 	return d, nil
 }
@@ -158,6 +188,24 @@ func (db *DB) TransferTableExists(suffix string) (bool, error) {
 	return exists, nil
 }
 
+// PushTokenTableExists checks if a table exists in the database
+func (db *DB) PushTokenTableExists(suffix string) (bool, error) {
+	var exists bool
+	err := db.db.QueryRow(fmt.Sprintf(`
+    SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_name = 't_push_token_%s'
+    );
+    `, suffix)).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
 // TransferName returns the name of the transfer db for the given contract
 func (d *DB) TransferName(contract string) string {
 	return fmt.Sprintf("%v_%s", d.chainID, strings.ToLower(contract))
@@ -173,6 +221,18 @@ func (d *DB) GetTransferDB(contract string) (*TransferDB, bool) {
 		return nil, false
 	}
 	return txdb, true
+}
+
+// GetPushTokenDB returns true if the push token db for the given contract exists, returns the db if it exists
+func (d *DB) GetPushTokenDB(contract string) (*PushTokenDB, bool) {
+	name := d.TransferName(contract)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	ptdb, ok := d.PushTokenDB[name]
+	if !ok {
+		return nil, false
+	}
+	return ptdb, true
 }
 
 // AddTransferDB adds a new transfer db for the given contract
@@ -191,7 +251,23 @@ func (d *DB) AddTransferDB(contract string) (*TransferDB, error) {
 	return txdb, nil
 }
 
-// Close closes the db and all its transfer dbs
+// AddPushTokenDB adds a new push token db for the given contract
+func (d *DB) AddPushTokenDB(contract string) (*PushTokenDB, error) {
+	name := d.TransferName(contract)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if ptdb, ok := d.PushTokenDB[name]; ok {
+		return ptdb, nil
+	}
+	ptdb, err := NewPushTokenDB(d.db, d.rdb, name)
+	if err != nil {
+		return nil, err
+	}
+	d.PushTokenDB[name] = ptdb
+	return ptdb, nil
+}
+
+// Close closes the db and all its transfer and push dbs
 func (d *DB) Close() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -202,6 +278,15 @@ func (d *DB) Close() error {
 		}
 
 		delete(d.TransferDB, i)
+	}
+
+	for i, ptdb := range d.PushTokenDB {
+		err := ptdb.Close()
+		if err != nil {
+			return err
+		}
+
+		delete(d.PushTokenDB, i)
 	}
 	return d.EventDB.Close()
 }

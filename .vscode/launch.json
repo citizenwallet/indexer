@@ -18,7 +18,17 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/node/main.go",
-      "args": ["-env", "../../.env", "-rate", "99", "-sync", "1", "-onlyApi"]
+      "args": [
+        "-env",
+        "../../.env",
+        "-rate",
+        "99",
+        "-sync",
+        "1",
+        "-onlyApi",
+        "-fbpath",
+        "../../firebase.json"
+      ]
     }
   ]
 }

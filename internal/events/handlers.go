@@ -43,6 +43,17 @@ func (s *Service) AddEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	exists, err = s.db.PushTokenTableExists(name)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if exists {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	// if we are adding an event, it should be queued for indexing
 	ev.State = indexer.EventStateQueued
 
@@ -65,8 +76,27 @@ func (s *Service) AddEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// create push token db for event
+	ptdb, err := s.db.AddPushTokenDB(ev.Contract)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = ptdb.CreatePushTable()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = ptdb.CreatePushTableIndexes()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	// add event to database
-	err = s.db.EventDB.AddEvent(ev.Contract, ev.State, ev.StartBlock, ev.LastBlock, ev.Standard, ev.Name, ev.Symbol)
+	err = s.db.EventDB.AddEvent(ev.Contract, ev.State, ev.StartBlock, ev.LastBlock, ev.Standard, ev.Name, ev.Symbol, ev.Decimals)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

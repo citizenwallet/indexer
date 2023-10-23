@@ -9,9 +9,11 @@ import (
 	"github.com/citizenwallet/indexer/internal/events"
 	"github.com/citizenwallet/indexer/internal/logs"
 	"github.com/citizenwallet/indexer/internal/profiles"
+	"github.com/citizenwallet/indexer/internal/push"
 	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
+	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -26,9 +28,10 @@ type Router struct {
 	evm         index.EVMRequester
 	db          *db.DB
 	b           *bucket.Bucket
+	firebase    *firebase.PushService
 }
 
-func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm index.EVMRequester, db *db.DB, b *bucket.Bucket) *Router {
+func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm index.EVMRequester, db *db.DB, b *bucket.Bucket, firebase *firebase.PushService) *Router {
 	return &Router{
 		chainId,
 		apiKey,
@@ -38,6 +41,7 @@ func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr str
 		evm,
 		db,
 		b,
+		firebase,
 	}
 }
 
@@ -61,6 +65,7 @@ func (r *Router) Start(port int) error {
 	l := logs.NewService(r.chainId, r.db, comm)
 	ev := events.NewService(r.db)
 	pr := profiles.NewService(r.b, comm)
+	pu := push.NewService(r.db, comm)
 
 	// configure routes
 	cr.Route("/logs/transfers", func(cr chi.Router) {
@@ -82,6 +87,11 @@ func (r *Router) Start(port int) error {
 		cr.Put("/{addr}", withMultiPartSignature(pr.PinMultiPartProfile))
 		cr.Patch("/{addr}", withSignature(pr.PinProfile))
 		cr.Delete("/{addr}", withSignature(pr.Unpin))
+	})
+
+	cr.Route("/push/{contract_address}", func(cr chi.Router) {
+		cr.Put("/", withSignature(pu.AddToken))
+		cr.Delete("/{addr}/{token}", withSignature(pu.RemoveAccountToken))
 	})
 
 	// start the server

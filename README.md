@@ -11,13 +11,13 @@ Move your leftovers coins to your Citizen Wallet on your smartphone.
 
 # Smart Contract Indexer (ERC20, ERC721, ERC1155)
 
-Smart contract indexing program
+Smart contract indexing program & api.
 
 ## Intro
 
-A smart contract indexer indexes smart contract transfer events and exposes an API to query them. The indexed data is stored into sqlite dbs (1 per contract + chain id).
+A smart contract indexer that indexes transfer events and exposes an API to query them. The indexed data is stored into a db. Tables are generated as needed per contract & chain id for each type of table that is needed.
 
-The purpose is to make it easier and faster to query event data.
+The purpose is to make it easier, faster and mainly **cheaper** to query event data.
 
 ## Support
 
@@ -300,8 +300,76 @@ Headers
 
 `X-Signature` & `X-Address`
 
-### Storage
+### Add a push token [Protected]
+
+Create or update a push token for a give token contract.
+
+`[PUT] /push/{contract_address}`
+
+URL params
+
+`{contract_address}`: the address of the token contract this is for.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+Body
+
+```
+{
+    "data": data, // base64 encoded data
+    "encoding": "base64", // how is the data encoded
+    "expiry": expiry,
+    "version": 2
+}
+```
+
+Data
+
+`indexer.PushToken`
+
+### Delete a push token [Protected]
+
+Delete a push token for a give token contract and account.
+
+`[DELETE] /push/{contract_address}/{address}/{token}`
+
+URL params
+
+`{contract_address}`: the address of the token contract this is for.
+
+`{address}`: the address that this token belongs to.
+
+`{token}`: the token to delete.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+Body
+
+```
+{
+    "data": data, // base64 encoded data
+    "encoding": "base64", // how is the data encoded
+    "expiry": expiry,
+    "version": 2
+}
+```
+
+Data
+
+`indexer.PushToken`
+
+## Storage
 
 We use postgres. If you have docker installed, you can spin up an instance using `docker compose up db`.
 
 The tables will be generated as needed.
+
+## Push Notifications
+
+We use Firebase Messaging to send push notifications. The reasoning behind this is that we are obliged to for Android and that they support iOS. This makes it very easy to use a common interface for both.
+
+A `firebase.json` service account is required for this functionality.

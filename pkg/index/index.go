@@ -3,6 +3,7 @@ package index
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math/big"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/citizenwallet/indexer/internal/sc"
 	"github.com/citizenwallet/indexer/internal/services/db"
+	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc1155"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc20"
@@ -52,14 +54,16 @@ type Indexer struct {
 	chainID *big.Int
 	db      *db.DB
 	evm     EVMRequester
+	fb      *firebase.PushService
 }
 
-func New(rate int, chainID *big.Int, db *db.DB, evm EVMRequester) (*Indexer, error) {
+func New(rate int, chainID *big.Int, db *db.DB, evm EVMRequester, fb *firebase.PushService) (*Indexer, error) {
 	return &Indexer{
 		rate:    rate,
 		chainID: chainID,
 		db:      db,
 		evm:     evm,
+		fb:      fb,
 	}, nil
 }
 
@@ -206,6 +210,14 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 		}
 	}
 
+	ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
+	if !ok {
+		ptdb, err = i.db.AddPushTokenDB(ev.Contract)
+		if err != nil {
+			return err
+		}
+	}
+
 	contractAddr := common.HexToAddress(ev.Contract)
 
 	blockNum := curr.Int64()
@@ -213,7 +225,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 	for blockNum > ev.LastBlock {
 		startBlock := blockNum - int64(i.rate)
 		if startBlock < ev.LastBlock {
-			startBlock = ev.LastBlock
+			startBlock = ev.LastBlock + 1
 		}
 
 		log.Default().Println("indexing block: ", startBlock, " to block: ", blockNum, " ...")
@@ -329,6 +341,56 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 						return err
 					}
 				}
+
+				go func() {
+					accTokens := map[string][]*indexer.PushToken{}
+
+					messages := []*indexer.PushMessage{}
+
+					for _, tx := range txs {
+						if tx.Status != indexer.TransferStatusSuccess {
+							continue
+						}
+
+						if _, ok = accTokens[tx.To]; !ok {
+							// get the push tokens for the recipient
+							pt, err := ptdb.GetAccountTokens(tx.To)
+							if err != nil {
+								return
+							}
+
+							if len(pt) == 0 {
+								// no push tokens for this account
+								continue
+							}
+
+							accTokens[tx.To] = pt
+						}
+
+						value := tx.ToRounded(ev.Decimals)
+
+						messages = append(messages, indexer.NewAnonymousPushMessage(accTokens[tx.To], ev.Name, fmt.Sprintf("%.2f", value), ev.Symbol))
+					}
+
+					if len(messages) > 0 {
+						for _, push := range messages {
+							badTokens, err := i.fb.Send(push)
+							if err != nil {
+								continue
+							}
+
+							if len(badTokens) > 0 {
+								// remove the bad tokens
+								for _, token := range badTokens {
+									err = ptdb.RemovePushToken(token)
+									if err != nil {
+										continue
+									}
+								}
+							}
+						}
+					}
+				}()
 			}
 		}
 

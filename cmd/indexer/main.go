@@ -104,7 +104,7 @@ func main() {
 
 	log.Default().Println("starting index service...")
 
-	i, err := index.New(*rate, chid, d, evm)
+	i, err := index.New(*rate, chid, d, evm, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

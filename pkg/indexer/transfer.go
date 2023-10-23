@@ -57,3 +57,18 @@ func (t *Transfer) GenerateHash(chainID int64) {
 	hash := crypto.Keccak256Hash([]byte(fmt.Sprintf("%d_%d_%s_%s_%s_%d_%d", chainID, t.TokenID, t.CreatedAt, t.From, t.To, t.Nonce, t.Value)))
 	t.Hash = hash.Hex()
 }
+
+func (t *Transfer) ToRounded(decimals int64) float64 {
+	v, _ := t.Value.Float64()
+
+	if decimals == 0 {
+		return v
+	}
+
+	// Calculate value * 10^x
+	multiplier, _ := new(big.Int).Exp(big.NewInt(10), big.NewInt(decimals), nil).Float64()
+
+	result, _ := new(big.Float).Quo(big.NewFloat(v), big.NewFloat(multiplier)).Float64()
+
+	return result
+}

@@ -367,3 +367,9 @@ Data
 We use postgres. If you have docker installed, you can spin up an instance using `docker compose up db`.
 
 The tables will be generated as needed.
+
+## Push Notifications
+
+We use Firebase Messaging to send push notifications. The reasoning behind this is that we are obliged to for Android and that they support iOS. This makes it very easy to use a common interface for both.
+
+A `firebase.json` service account is required for this functionality.

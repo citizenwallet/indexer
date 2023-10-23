@@ -11,13 +11,13 @@ Move your leftovers coins to your Citizen Wallet on your smartphone.
 
 # Smart Contract Indexer (ERC20, ERC721, ERC1155)
 
-Smart contract indexing program
+Smart contract indexing program & api.
 
 ## Intro
 
-A smart contract indexer indexes smart contract transfer events and exposes an API to query them. The indexed data is stored into sqlite dbs (1 per contract + chain id).
+A smart contract indexer that indexes transfer events and exposes an API to query them. The indexed data is stored into a db. Tables are generated as needed per contract & chain id for each type of table that is needed.
 
-The purpose is to make it easier and faster to query event data.
+The purpose is to make it easier, faster and mainly **cheaper** to query event data.
 
 ## Support
 
@@ -362,7 +362,7 @@ Data
 
 `indexer.PushToken`
 
-### Storage
+## Storage
 
 We use postgres. If you have docker installed, you can spin up an instance using `docker compose up db`.
 

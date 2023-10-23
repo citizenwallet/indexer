@@ -225,7 +225,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 	for blockNum > ev.LastBlock {
 		startBlock := blockNum - int64(i.rate)
 		if startBlock < ev.LastBlock {
-			startBlock = ev.LastBlock
+			startBlock = ev.LastBlock + 1
 		}
 
 		log.Default().Println("indexing block: ", startBlock, " to block: ", blockNum, " ...")

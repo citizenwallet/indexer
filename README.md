@@ -300,6 +300,68 @@ Headers
 
 `X-Signature` & `X-Address`
 
+### Add a push token [Protected]
+
+Create or update a push token for a give token contract.
+
+`[PUT] /push/{contract_address}`
+
+URL params
+
+`{contract_address}`: the address of the token contract this is for.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+Body
+
+```
+{
+    "data": data, // base64 encoded data
+    "encoding": "base64", // how is the data encoded
+    "expiry": expiry,
+    "version": 2
+}
+```
+
+Data
+
+`indexer.PushToken`
+
+### Delete a push token [Protected]
+
+Delete a push token for a give token contract and account.
+
+`[DELETE] /push/{contract_address}/{address}/{token}`
+
+URL params
+
+`{contract_address}`: the address of the token contract this is for.
+
+`{address}`: the address that this token belongs to.
+
+`{token}`: the token to delete.
+
+Headers
+
+`X-Signature` & `X-Address`
+
+Body
+
+```
+{
+    "data": data, // base64 encoded data
+    "encoding": "base64", // how is the data encoded
+    "expiry": expiry,
+    "version": 2
+}
+```
+
+Data
+
+`indexer.PushToken`
+
 ### Storage
 
 We use postgres. If you have docker installed, you can spin up an instance using `docker compose up db`.

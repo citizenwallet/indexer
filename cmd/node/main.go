@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"flag"
 	"log"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/citizenwallet/indexer/internal/services/webhook"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/router"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -128,7 +130,18 @@ func main() {
 
 	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret)
 
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, bu, fb)
+	pkBytes, err := hex.DecodeString(conf.PaymasterKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Generate ecdsa.PrivateKey from bytes
+	privateKey, err := crypto.ToECDSA(pkBytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, bu, fb, privateKey)
 
 	go func() {
 		quitAck <- api.Start(*port)

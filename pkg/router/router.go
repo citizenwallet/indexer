@@ -1,6 +1,7 @@
 package router
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -8,30 +9,33 @@ import (
 	"github.com/citizenwallet/indexer/internal/auth"
 	"github.com/citizenwallet/indexer/internal/events"
 	"github.com/citizenwallet/indexer/internal/logs"
+	"github.com/citizenwallet/indexer/internal/paymaster"
 	"github.com/citizenwallet/indexer/internal/profiles"
 	"github.com/citizenwallet/indexer/internal/push"
 	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/internal/services/firebase"
+	"github.com/citizenwallet/indexer/internal/userop"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
 type Router struct {
-	chainId     *big.Int
-	apiKey      string
-	epAddr      string
-	accFactAddr string
-	prfAddr     string
-	evm         index.EVMRequester
-	db          *db.DB
-	b           *bucket.Bucket
-	firebase    *firebase.PushService
+	chainId      *big.Int
+	apiKey       string
+	epAddr       string
+	accFactAddr  string
+	prfAddr      string
+	evm          index.EVMRequester
+	db           *db.DB
+	b            *bucket.Bucket
+	firebase     *firebase.PushService
+	paymasterKey *ecdsa.PrivateKey
 }
 
-func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm index.EVMRequester, db *db.DB, b *bucket.Bucket, firebase *firebase.PushService) *Router {
+func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm index.EVMRequester, db *db.DB, b *bucket.Bucket, firebase *firebase.PushService, pk *ecdsa.PrivateKey) *Router {
 	return &Router{
 		chainId,
 		apiKey,
@@ -42,6 +46,7 @@ func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr str
 		db,
 		b,
 		firebase,
+		pk,
 	}
 }
 
@@ -66,6 +71,9 @@ func (r *Router) Start(port int) error {
 	ev := events.NewService(r.db)
 	pr := profiles.NewService(r.b, comm)
 	pu := push.NewService(r.db, comm)
+
+	pm := paymaster.NewService(r.evm, r.paymasterKey)
+	uop := userop.NewService(r.evm, r.paymasterKey)
 
 	// configure routes
 	cr.Route("/logs/transfers", func(cr chi.Router) {
@@ -92,6 +100,13 @@ func (r *Router) Start(port int) error {
 	cr.Route("/push/{contract_address}", func(cr chi.Router) {
 		cr.Put("/", withSignature(pu.AddToken))
 		cr.Delete("/{addr}/{token}", withSignature(pu.RemoveAccountToken))
+	})
+
+	cr.Route("/rpc/{contract_address}", func(cr chi.Router) {
+		cr.Post("/", withJSONRPCRequest(map[string]http.HandlerFunc{
+			"pm_sponsorUserOperation": pm.Sponsor,
+			"eth_sendUserOperation":   uop.Send,
+		}))
 	})
 
 	// start the server

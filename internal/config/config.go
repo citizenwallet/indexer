@@ -28,6 +28,7 @@ type Config struct {
 	DBHost                string `env:"POSTGRES_HOST,required"`
 	DBReaderHost          string `env:"POSTGRES_READER_HOST,required"`
 	DiscordURL            string `env:"DISCORD_URL,required"`
+	PaymasterKey          string `env:"PAYMASTER_KEY,required"`
 }
 
 func New(ctx context.Context, envpath string) (*Config, error) {

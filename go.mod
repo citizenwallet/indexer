@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	firebase.google.com/go/v4 v4.12.1
-	github.com/citizenwallet/smartcontracts v0.0.50
+	github.com/citizenwallet/smartcontracts v0.0.53-0.20231102191519-4e738c0501ce
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/ethereum-optimism/optimism v1.0.9
 	github.com/ethereum/go-ethereum v1.11.6

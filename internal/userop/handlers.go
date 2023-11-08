@@ -1,17 +1,25 @@
 package userop
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"encoding/json"
+	"math/big"
 	"net/http"
+	"time"
 
 	comm "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/indexer"
-	"github.com/citizenwallet/smartcontracts/pkg/contracts/authorizer"
+	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
+	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/go-chi/chi/v5"
 )
 
 type Service struct {
@@ -29,25 +37,35 @@ func NewService(evm index.EVMRequester, pk *ecdsa.PrivateKey) *Service {
 }
 
 func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
-	println("userop send")
 	// parse contract address from url params
-	// contractAddr := chi.URLParam(r, "contract_address")
+	contractAddr := chi.URLParam(r, "contract_address")
 
-	// addr := common.HexToAddress(contractAddr)
+	addr := common.HexToAddress(contractAddr)
 
-	// instantiate account factory contract
-	// af, err := accfactory.NewAccfactory(addr, s.evm.Client())
-	// if err != nil {
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	return
-	// }
+	// Get the contract's bytecode
+	bytecode, err := s.evm.Client().CodeAt(context.Background(), addr, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
-	// println(af)
+	// Check if the contract is deployed
+	if len(bytecode) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// instantiate paymaster contract
+	pm, err := pay.NewPaymaster(addr, s.evm.Client())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	// parse the incoming params
 
 	var params []any
-	err := json.NewDecoder(r.Body).Decode(&params)
+	err = json.NewDecoder(r.Body).Decode(&params)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -56,13 +74,10 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	var userop indexer.UserOp
 	var epAddr string
 
-	println(userop.CallData)
-	println(epAddr)
-
 	for i, param := range params {
 		switch i {
 		case 0:
-			v, ok := param.(map[string]interface{})
+			v, ok := param.(map[string]any)
 			if !ok {
 				w.WriteHeader(http.StatusBadRequest)
 				return
@@ -94,33 +109,77 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: check paymaster address of signature
+	// check the paymaster signature, make sure it matches the paymaster address
 
-	// TODO: check user op signature recovered address against account address on factory
+	// unpack the validity and check if it is valid
+	// Define the arguments
+	uint48Ty, _ := abi.NewType("uint48", "uint48", nil)
+	args := abi.Arguments{
+		abi.Argument{
+			Type: uint48Ty,
+		},
+		abi.Argument{
+			Type: uint48Ty,
+		},
+	}
 
-	// verify the signature of the user op
-
-	// verify the user op
-	// sender := common.HexToAddress(userop.Sender)
-
-	auth, err := authorizer.NewAuthorizer(common.HexToAddress(epAddr), s.evm.Client())
+	// Encode the values
+	validity, err := args.Unpack(userop.PaymasterAndData[20:84])
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	op := &authorizer.UserOperation{
-		Sender:               common.HexToAddress(userop.Sender),
-		Nonce:                comm.HexToBigInt(userop.Nonce),
-		InitCode:             common.FromHex(userop.InitCode),
-		CallData:             common.FromHex(userop.CallData),
-		CallGasLimit:         comm.HexToBigInt(userop.CallGasLimit),
-		VerificationGasLimit: comm.HexToBigInt(userop.VerificationGasLimit),
-		PreVerificationGas:   comm.HexToBigInt(userop.PreVerificationGas),
-		MaxFeePerGas:         comm.HexToBigInt(userop.MaxFeePerGas),
-		MaxPriorityFeePerGas: comm.HexToBigInt(userop.MaxPriorityFeePerGas),
-		PaymasterAndData:     common.FromHex(userop.PaymasterAndData),
-		Signature:            common.FromHex(userop.Signature),
+	validUntil, ok := validity[0].(*big.Int)
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	validAfter, ok := validity[1].(*big.Int)
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// check if the signature is theoretically still valid
+	now := time.Now().Unix()
+	if validUntil.Int64() < now || validAfter.Int64() > now {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Get the hash of the message that was signed
+	hash, err := pm.GetHash(nil, pay.UserOperation(userop), validUntil, validAfter)
+	if err != nil {
+		println(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Convert the hash to an Ethereum signed message hash
+	hhash := accounts.TextHash(hash[:])
+
+	sig := make([]byte, len(userop.PaymasterAndData[84:]))
+	copy(sig, userop.PaymasterAndData[84:])
+
+	// update the signature v to undo the 27/28 addition
+	sig[crypto.RecoveryIDOffset] -= 27
+
+	// recover the public key from the signature
+	sigPublicKey, err := crypto.Ecrecover(hhash, sig)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	publicKeyBytes := crypto.FromECDSAPub(&s.paymasterKey.PublicKey)
+
+	// check if the public key matches the recovered public key
+	matches := bytes.Equal(sigPublicKey, publicKeyBytes)
+	if !matches {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	chainId, err := s.evm.ChainID()
@@ -135,7 +194,13 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := auth.HandleOps(transactor, []authorizer.UserOperation{*op}, common.HexToAddress(epAddr))
+	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Client())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	tx, err := ep.HandleOps(transactor, []tokenEntryPoint.UserOperation{tokenEntryPoint.UserOperation(userop)}, common.HexToAddress(epAddr))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -148,186 +213,5 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	println("userop sent!")
-
-	// get nonce using the account factory since we are not sure if the account has been created yet
-	// nonce, err := af.GetNonce(nil, sender, common.Big0)
-	// if err != nil {
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	return
-	// }
-
-	// Decode hex string to bytes
-	// 	bytes := common.FromHex(userop.Nonce)
-
-	// 	// Get *big.Int from bytes
-	// 	opnonce := new(big.Int)
-	// 	opnonce.SetBytes(bytes)
-
-	// 	// println("nonce: ", nonce.String())
-	// 	// println("opnonce: ", opnonce.String())
-
-	// 	// make sure that the nonce is correct
-	// 	// if nonce.Cmp(opnonce) != 0 {
-	// 	// 	// nonce is wrong
-	// 	// 	w.WriteHeader(http.StatusBadRequest)
-	// 	// 	return
-	// 	// }
-
-	// 	// if nonce.Cmp(big.NewInt(0)) == 0 { // TODO: put this back
-	// 	if opnonce.Cmp(big.NewInt(0)) == 0 {
-	// 		// needs an account
-	// 		// Check if there is contract code at the address
-	// 		code, err := s.evm.Client().CodeAt(context.Background(), sender, nil)
-	// 		if err != nil {
-	// 			w.WriteHeader(http.StatusInternalServerError)
-	// 			return
-	// 		}
-	// 		if len(code) > 0 {
-	// 			// there is already code at the address even though the nonce is 0
-	// 			w.WriteHeader(http.StatusBadRequest)
-	// 			return
-	// 		}
-
-	// 		pkBytes, err := hex.DecodeString("fa714a855c94ac395c3b85c337bc9d84b4e2234b147fdd3dafb22f5a1c02bf2c")
-	// 		if err != nil {
-	// 			w.WriteHeader(http.StatusInternalServerError)
-	// 			return
-	// 		}
-
-	// 		// Generate ecdsa.PrivateKey from bytes
-	// 		privateKey, err := crypto.ToECDSA(pkBytes)
-	// 		if err != nil {
-	// 			w.WriteHeader(http.StatusInternalServerError)
-	// 			return
-	// 		}
-
-	// 		// create the account
-	// 		tx, err := af.CreateAccount(auth, crypto.PubkeyToAddress(privateKey.PublicKey), common.Big0)
-	// 		if err != nil {
-	// 			println(err.Error())
-	// 			w.WriteHeader(http.StatusInternalServerError)
-	// 			return
-	// 		}
-
-	// 		println(tx.Hash().Hex())
-
-	// 		// Wait for the transaction to be mined
-	// 		receipt, err := bind.WaitMined(context.Background(), s.evm.Client(), tx)
-	// 		if err != nil || receipt.Status != 1 {
-	// 			w.WriteHeader(http.StatusInternalServerError)
-	// 			return
-	// 		}
-	// 		println("receipt of create account")
-	// 		println(receipt.Status)
-
-	// 		// allow the token
-	// 		accountABI, err := abi.JSON(strings.NewReader(account.AccountMetaData.ABI))
-	// 		if err != nil {
-	// 			w.WriteHeader(http.StatusInternalServerError)
-	// 			return
-	// 		}
-
-	// 		data, err := accountABI.Pack("updateWhitelist", []common.Address{common.HexToAddress("0x765DE816845861e75A25fCA122bb6898B8B1282a")})
-	// 		if err != nil {
-	// 			println(err.Error())
-	// 			w.WriteHeader(http.StatusInternalServerError)
-	// 			return
-	// 		}
-
-	// 		acc, err := account.NewAccount(sender, s.evm.Client())
-	// 		if err != nil {
-	// 			w.WriteHeader(http.StatusInternalServerError)
-	// 			return
-	// 		}
-
-	// 		tx, err = acc.Execute(auth, sender, common.Big0, data)
-	// 		if err != nil || receipt.Status != 1 {
-	// 			w.WriteHeader(http.StatusInternalServerError)
-	// 			return
-	// 		}
-
-	// 		// Wait for the transaction to be mined
-	// 		receipt, err = bind.WaitMined(context.Background(), s.evm.Client(), tx)
-	// 		if err != nil || receipt.Status != 1 {
-	// 			w.WriteHeader(http.StatusInternalServerError)
-	// 			return
-	// 		}
-	// 		println("receipt of execute whitelist")
-	// 		println(receipt.Status)
-	// 	}
-
-	// 	// check if the account factory we are calling is the same as the one that was used to create the account
-	// 	// if strings.ToLower(a.Hex()) != strings.ToLower(pk.Hex()) {
-	// 	// 	w.WriteHeader(http.StatusUnauthorized)
-	// 	// 	return
-	// 	// }
-
-	// 	acc, err := account.NewAccount(sender, s.evm.Client())
-	// 	if err != nil {
-	// 		w.WriteHeader(http.StatusInternalServerError)
-	// 		return
-	// 	}
-
-	// 	// accountABI, err := abi.JSON(strings.NewReader(account.AccountABI))
-	// 	// if err != nil {
-	// 	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	// 	return
-	// 	// }
-
-	// 	// data, err := accountABI.Pack("updateWhitelist", []common.Address{common.HexToAddress("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")})
-	// 	// if err != nil {
-	// 	// 	println(err.Error())
-	// 	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	// 	return
-	// 	// }
-
-	// 	// tx, err := acc.Execute(auth, sender, common.Big0, data)
-	// 	// if err != nil {
-	// 	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	// 	return
-	// 	// }
-
-	// 	abiString := `[{"constant":false,"inputs":[{"name":"_to","type":"address"},{"name":"_value","type":"uint256"}],"name":"transfer","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"}]`
-
-	// 	contractABI, err := abi.JSON(strings.NewReader(abiString))
-	// 	if err != nil {
-	// 		w.WriteHeader(http.StatusInternalServerError)
-	// 		return
-	// 	}
-
-	// 	println(erc20.Erc20MetaData.ABI)
-
-	// 	functionSignature := contractABI.Methods["transfer"].Sig
-
-	// 	println(functionSignature)
-
-	// 	data, err := contractABI.Pack("transfer", common.HexToAddress("0xf5D0181b80E1C793D98b95BFF0E6CDe1D27a3ef8"), big.NewInt(100000000000000000))
-	// 	if err != nil {
-	// 		println(err.Error())
-	// 		w.WriteHeader(http.StatusInternalServerError)
-	// 		return
-	// 	}
-
-	// 	tx, err := acc.Execute(auth, common.HexToAddress("0x765DE816845861e75A25fCA122bb6898B8B1282a"), common.Big0, data)
-	// 	if err != nil {
-	// 		println(err.Error())
-	// 		w.WriteHeader(http.StatusInternalServerError)
-	// 		return
-	// 	}
-
-	// 	// Wait for the transaction to be mined
-	// 	receipt, err := bind.WaitMined(context.Background(), s.evm.Client(), tx)
-	// 	if err != nil || receipt.Status != 1 {
-	// 		w.WriteHeader(http.StatusInternalServerError)
-	// 		return
-	// 	}
-
-	// 	print(tx.Hash().Hex())
-
-	// println(
-	//
-	//	"sender: ", sender.Hex(),
-	//
-	// )
+	comm.JSONRPCBody(w, userop, nil)
 }

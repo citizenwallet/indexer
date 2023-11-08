@@ -1,9 +1,9 @@
 package paymaster
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -13,10 +13,20 @@ import (
 	comm "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/indexer"
-	"github.com/citizenwallet/smartcontracts/pkg/contracts/authorizer"
+	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
+	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-chi/chi/v5"
+)
+
+var (
+	// Allowed function signatures
+	funcSigSingle = crypto.Keccak256([]byte("execute(address,uint256,bytes)"))[:4]
+	funcSigBatch  = crypto.Keccak256([]byte("executeBatch(address[],uint256[],bytes[])"))[:4]
 )
 
 type Service struct {
@@ -50,23 +60,23 @@ func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 
 	addr := common.HexToAddress(contractAddr)
 
-	// instantiate account factory contract
-	// af, err := accfactory.NewAccfactory(addr, s.evm.Client())
-	// if err != nil {
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	return
-	// }
-
 	// Get the contract's bytecode
 	bytecode, err := s.evm.Client().CodeAt(context.Background(), addr, nil)
 	if err != nil {
-		fmt.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	// Check if the contract is deployed
 	if len(bytecode) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// instantiate paymaster contract
+	pm, err := pay.NewPaymaster(addr, s.evm.Client())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -136,114 +146,168 @@ func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth, err := authorizer.NewAuthorizer(common.HexToAddress(epAddr), s.evm.Client())
+	// verify the user op
+	sender := userop.Sender
+
+	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Client())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	// verify the user op
-	sender := common.HexToAddress(userop.Sender)
+	// verify the nonce
 
 	// get nonce using the account factory since we are not sure if the account has been created yet
-	nonce, err := auth.GetNonce(nil, sender, common.Big0)
+	nonce, err := ep.GetNonce(nil, sender, common.Big0)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	// Decode hex string to bytes
-	bytes := common.FromHex(userop.Nonce)
-
-	// Get *big.Int from bytes
-	opnonce := new(big.Int)
-	opnonce.SetBytes(bytes)
-
 	// make sure that the nonce is correct
-	if nonce.Cmp(opnonce) != 0 {
+	if nonce.Cmp(userop.Nonce) != 0 {
 		// nonce is wrong
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
+	// verify the init code
+	initCode := hexutil.Encode(userop.InitCode)
+
 	// if the nonce is not 0, then the init code should be empty
-	if nonce.Cmp(big.NewInt(0)) == 1 && userop.InitCode != "0x" {
+	if nonce.Cmp(big.NewInt(0)) == 1 && initCode != "0x" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	op := &authorizer.UserOperation{
-		Sender:               common.HexToAddress(userop.Sender),
-		Nonce:                comm.HexToBigInt(userop.Nonce),
-		InitCode:             common.FromHex(userop.InitCode),
-		CallData:             common.FromHex(userop.CallData),
-		CallGasLimit:         comm.HexToBigInt(userop.CallGasLimit),
-		VerificationGasLimit: comm.HexToBigInt(userop.VerificationGasLimit),
-		PreVerificationGas:   comm.HexToBigInt(userop.PreVerificationGas),
-		MaxFeePerGas:         comm.HexToBigInt(userop.MaxFeePerGas),
-		MaxPriorityFeePerGas: comm.HexToBigInt(userop.MaxPriorityFeePerGas),
-		PaymasterAndData:     common.FromHex("0x"),
-		Signature:            common.FromHex("0x"),
+	// if the nonce is 0, then check that the factory returns the sender
+	if nonce.Cmp(big.NewInt(0)) == 0 {
+		factoryaddr := common.BytesToAddress(userop.InitCode[:20])
+
+		// Get the contract's bytecode
+		bytecode, err := s.evm.Client().CodeAt(context.Background(), factoryaddr, nil)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		// Check if the contract is deployed
+		if len(bytecode) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 	}
 
+	// verify the calldata, it should only be allowed to contain the function signatures we allow
+	funcSig := userop.CallData[:4]
+	if !bytes.Equal(funcSig, funcSigSingle) && !bytes.Equal(funcSig, funcSigBatch) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+
+	}
+
+	addressArg, _ := abi.NewType("address", "address", nil)
+	uint256Arg, _ := abi.NewType("uint256", "uint256", nil)
+	bytesArg, _ := abi.NewType("bytes", "bytes", nil)
+	callArgs := abi.Arguments{
+		abi.Argument{
+			Type: addressArg,
+		},
+		abi.Argument{
+			Type: uint256Arg,
+		},
+		abi.Argument{
+			Type: bytesArg,
+		},
+	}
+
+	// Unpack the values
+	callValues, err := callArgs.Unpack(userop.CallData[4:])
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// destination address
+	_, ok := callValues[0].(common.Address)
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// value in uint256
+	callValue, ok := callValues[1].(*big.Int)
+	if !ok || callValue.Cmp(big.NewInt(0)) != 0 {
+		// shouldn't have any value
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// data in bytes
+	_, ok = callValues[2].([]byte)
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// validity period
 	now := time.Now().Unix()
+	validUntil := big.NewInt(now + 30)
+	validAfter := big.NewInt(now - 10)
 
-	hash, err := auth.GetHash(nil, *op, big.NewInt(now+30), big.NewInt(now))
+	// Ensure the values fit within 48 bits
+	if validUntil.BitLen() > 48 || validAfter.BitLen() > 48 {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Define the arguments
+	uint48Ty, _ := abi.NewType("uint48", "uint48", nil)
+	args := abi.Arguments{
+		abi.Argument{
+			Type: uint48Ty,
+		},
+		abi.Argument{
+			Type: uint48Ty,
+		},
+	}
+
+	// Encode the values
+	validity, err := args.Pack(validUntil, validAfter)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	sig, err := crypto.Sign(hash[:], s.paymasterKey)
+	hash, err := pm.GetHash(nil, pay.UserOperation(userop), validUntil, validAfter)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	// Example uint48 values
-	validUntil := uint64(now + 30)
-	validAfter := uint64(now)
+	// Convert the hash to an Ethereum signed message hash
+	hhash := accounts.TextHash(hash[:])
 
-	// Create byte slices
-	bytes1 := make([]byte, 8)
-	bytes2 := make([]byte, 8)
+	sig, err := crypto.Sign(hhash, s.paymasterKey)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
-	// Convert uint48 to bytes
-	binary.BigEndian.PutUint64(bytes1, validUntil)
-	binary.BigEndian.PutUint64(bytes2, validAfter)
+	// Ensure the v value is 27 or 28, this is because of the way Ethereum signature recovery works
+	if sig[crypto.RecoveryIDOffset] == 0 || sig[crypto.RecoveryIDOffset] == 1 {
+		sig[crypto.RecoveryIDOffset] += 27
+	}
 
-	// Concatenate the byte slices
-	data := append(bytes1[2:], bytes2[2:]...)
-
-	// a, err := account.Authorizer(nil)
-	// if err != nil {
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	return
-	// }
-
-	// println("authorizer address: " + a.Hex())
-
-	pk := crypto.PubkeyToAddress(s.paymasterKey.PublicKey)
-
-	// we should be able to derive the entrypoint address from the account
-	// sender, err := af.GetAddress(nil, o, common.Big0)
-	// if err != nil {
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	return
-	// }
-
-	// println(epAddr)
-	// println(pk.Hex())
-	// println(userop.Sender)
+	data := append(addr.Bytes(), validity...)
+	data = append(data, sig...)
 
 	pd := &paymasterData{
-		PaymasterAndData:     fmt.Sprintf("%s%x%s", pk.Hex(), data, common.Bytes2Hex(sig)),
-		PreVerificationGas:   "0x0",
-		VerificationGasLimit: "0x0",
-		CallGasLimit:         "0x0",
+		PaymasterAndData:     hexutil.Encode(data),
+		PreVerificationGas:   hexutil.EncodeBig(userop.PreVerificationGas),
+		VerificationGasLimit: hexutil.EncodeBig(userop.VerificationGasLimit),
+		CallGasLimit:         hexutil.EncodeBig(userop.CallGasLimit),
 	}
-
-	println("paymaster approved!")
 
 	comm.JSONRPCBody(w, pd, nil)
 }

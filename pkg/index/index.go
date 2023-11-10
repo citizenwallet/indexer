@@ -28,26 +28,6 @@ var (
 	ErrIndexingRecoverable ErrIndexing = errors.New("error indexing recoverable") // an error occurred while indexing but it is not fatal
 )
 
-// type EVMType string
-
-// const (
-// 	EVMTypeEthereum EVMType = "ethereum"
-// 	EVMTypeOptimism EVMType = "optimism"
-// )
-
-// type EVMRequester interface {
-// 	Context() context.Context
-// 	Client() *ethclient.Client
-
-// 	ChainID() (*big.Int, error)
-// 	LatestBlock() (*types.Block, error)
-// 	FilterLogs(q ethereum.FilterQuery) ([]types.Log, error)
-// 	BlockByNumber(number *big.Int) (*types.Block, error)
-// 	BlockTime(number *big.Int) (*types.Block, error)
-
-// 	Close()
-// }
-
 type Indexer struct {
 	rate    int
 	chainID *big.Int

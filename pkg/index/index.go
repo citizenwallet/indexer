@@ -1,7 +1,6 @@
 package index
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -21,7 +20,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type ErrIndexing error
@@ -30,34 +28,35 @@ var (
 	ErrIndexingRecoverable ErrIndexing = errors.New("error indexing recoverable") // an error occurred while indexing but it is not fatal
 )
 
-type EVMType string
+// type EVMType string
 
-const (
-	EVMTypeEthereum EVMType = "ethereum"
-	EVMTypeOptimism EVMType = "optimism"
-)
+// const (
+// 	EVMTypeEthereum EVMType = "ethereum"
+// 	EVMTypeOptimism EVMType = "optimism"
+// )
 
-type EVMRequester interface {
-	Context() context.Context
-	Client() *ethclient.Client
+// type EVMRequester interface {
+// 	Context() context.Context
+// 	Client() *ethclient.Client
 
-	ChainID() (*big.Int, error)
-	LatestBlock() (*types.Block, error)
-	FilterLogs(q ethereum.FilterQuery) ([]types.Log, error)
-	BlockByNumber(number *big.Int) (*types.Block, error)
+// 	ChainID() (*big.Int, error)
+// 	LatestBlock() (*types.Block, error)
+// 	FilterLogs(q ethereum.FilterQuery) ([]types.Log, error)
+// 	BlockByNumber(number *big.Int) (*types.Block, error)
+// 	BlockTime(number *big.Int) (*types.Block, error)
 
-	Close()
-}
+// 	Close()
+// }
 
 type Indexer struct {
 	rate    int
 	chainID *big.Int
 	db      *db.DB
-	evm     EVMRequester
+	evm     indexer.EVMRequester
 	fb      *firebase.PushService
 }
 
-func New(rate int, chainID *big.Int, db *db.DB, evm EVMRequester, fb *firebase.PushService) (*Indexer, error) {
+func New(rate int, chainID *big.Int, db *db.DB, evm indexer.EVMRequester, fb *firebase.PushService) (*Indexer, error) {
 	return &Indexer{
 		rate:    rate,
 		chainID: chainID,
@@ -69,11 +68,10 @@ func New(rate int, chainID *big.Int, db *db.DB, evm EVMRequester, fb *firebase.P
 
 func (i *Indexer) IndexERC20From(contract string, from int64) error {
 	// get the latest block
-	latestBlock, err := i.evm.LatestBlock()
+	curr, err := i.evm.LatestBlock()
 	if err != nil {
 		return ErrIndexingRecoverable
 	}
-	curr := latestBlock.Number()
 
 	ev, err := i.db.EventDB.GetEvent(contract, indexer.ERC20)
 	if err != nil {
@@ -86,11 +84,10 @@ func (i *Indexer) IndexERC20From(contract string, from int64) error {
 // Start starts the indexer service
 func (i *Indexer) Start() error {
 	// get the latest block
-	latestBlock, err := i.evm.LatestBlock()
+	curr, err := i.evm.LatestBlock()
 	if err != nil {
 		return ErrIndexingRecoverable
 	}
-	curr := latestBlock.Number()
 
 	// check if there are any queued events
 	evs, err := i.db.EventDB.GetOutdatedEvents(curr.Int64())
@@ -239,6 +236,8 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 
 		logs, err := i.evm.FilterLogs(query)
 		if err != nil {
+			println("i.evm.FilterLogs")
+			println(err.Error())
 			return ErrIndexingRecoverable
 		}
 
@@ -246,7 +245,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			txs := []*indexer.Transfer{}
 
 			// store a map of blocks by block number
-			blks := map[int64]*types.Block{}
+			blks := make(map[int64]uint64)
 
 			for index, l := range logs {
 				// to reduce API consumption, cache blocks by number
@@ -255,7 +254,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 				blk, ok := blks[int64(l.BlockNumber)]
 				if !ok {
 					// was not fetched yet, fetch it
-					blk, err = i.evm.BlockByNumber(big.NewInt(int64(l.BlockNumber)))
+					blk, err = i.evm.BlockTime(big.NewInt(int64(l.BlockNumber)))
 					if err != nil {
 						return ErrIndexingRecoverable
 					}
@@ -264,7 +263,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 					blks[int64(l.BlockNumber)] = blk
 				}
 
-				blktime := time.UnixMilli(int64(blk.Time()) * 1000).UTC()
+				blktime := time.UnixMilli(int64(blk) * 1000).UTC()
 
 				if index == 0 {
 					log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " [", blktime, "] ...")
@@ -488,7 +487,7 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 			txs := []*indexer.Transfer{}
 
 			// store a map of blocks by block number
-			blks := map[int64]*types.Block{}
+			blks := make(map[int64]uint64)
 
 			for index, l := range logs {
 				// to reduce API consumption, cache blocks by number
@@ -497,7 +496,7 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 				blk, ok := blks[int64(l.BlockNumber)]
 				if !ok {
 					// was not fetched yet, fetch it
-					blk, err = i.evm.BlockByNumber(big.NewInt(int64(l.BlockNumber)))
+					blk, err = i.evm.BlockTime(big.NewInt(int64(l.BlockNumber)))
 					if err != nil {
 						return ErrIndexingRecoverable
 					}
@@ -506,7 +505,7 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 					blks[int64(l.BlockNumber)] = blk
 				}
 
-				blktime := time.UnixMilli(int64(blk.Time()) * 1000).UTC()
+				blktime := time.UnixMilli(int64(blk) * 1000).UTC()
 
 				if index == 0 {
 					log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " [", blktime, "] ...")

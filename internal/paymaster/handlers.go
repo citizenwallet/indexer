@@ -11,7 +11,6 @@ import (
 	"time"
 
 	comm "github.com/citizenwallet/indexer/internal/common"
-	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
@@ -30,13 +29,13 @@ var (
 )
 
 type Service struct {
-	evm index.EVMRequester
+	evm indexer.EVMRequester
 
 	paymasterKey *ecdsa.PrivateKey
 }
 
 // NewService
-func NewService(evm index.EVMRequester, pk *ecdsa.PrivateKey) *Service {
+func NewService(evm indexer.EVMRequester, pk *ecdsa.PrivateKey) *Service {
 	return &Service{
 		evm,
 		pk,
@@ -61,7 +60,7 @@ func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 	addr := common.HexToAddress(contractAddr)
 
 	// Get the contract's bytecode
-	bytecode, err := s.evm.Client().CodeAt(context.Background(), addr, nil)
+	bytecode, err := s.evm.CodeAt(context.Background(), addr, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -74,7 +73,7 @@ func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// instantiate paymaster contract
-	pm, err := pay.NewPaymaster(addr, s.evm.Client())
+	pm, err := pay.NewPaymaster(addr, s.evm.Backend())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -149,7 +148,7 @@ func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 	// verify the user op
 	sender := userop.Sender
 
-	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Client())
+	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Backend())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -185,7 +184,7 @@ func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 		factoryaddr := common.BytesToAddress(userop.InitCode[:20])
 
 		// Get the contract's bytecode
-		bytecode, err := s.evm.Client().CodeAt(context.Background(), factoryaddr, nil)
+		bytecode, err := s.evm.CodeAt(context.Background(), factoryaddr, nil)
 		if err != nil {
 			fmt.Println(err)
 			return

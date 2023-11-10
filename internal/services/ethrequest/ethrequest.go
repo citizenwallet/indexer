@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -19,14 +20,15 @@ const (
 	ETHChainID            = "eth_chainId"
 )
 
+type EthBlock struct {
+	Number    string `json:"number"`
+	Timestamp string `json:"timestamp"`
+}
+
 type EthService struct {
 	rpc    *rpc.Client
 	client *ethclient.Client
 	ctx    context.Context
-}
-
-func (e *EthService) Client() *ethclient.Client {
-	return e.client
 }
 
 func (e *EthService) Context() context.Context {
@@ -46,6 +48,27 @@ func NewEthService(ctx context.Context, endpoint string) (*EthService, error) {
 
 func (e *EthService) Close() {
 	e.client.Close()
+}
+
+func (e *EthService) BlockTime(number *big.Int) (uint64, error) {
+	blk, err := e.client.BlockByNumber(e.ctx, number)
+	if err != nil {
+		return 0, err
+	}
+
+	return blk.Time(), nil
+}
+
+func (e *EthService) Backend() bind.ContractBackend {
+	return e.client
+}
+
+func (e *EthService) CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error) {
+	return e.client.CodeAt(e.ctx, account, blockNumber)
+}
+
+func (e *EthService) NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error) {
+	return e.client.NonceAt(e.ctx, account, blockNumber)
 }
 
 func (e *EthService) EstimateFullGas(from common.Address, tx *types.Transaction) (uint64, error) {
@@ -116,8 +139,13 @@ func (e *EthService) SendRawTransaction(tx string) ([]byte, error) {
 	return nil, err
 }
 
-func (e *EthService) LatestBlock() (*types.Block, error) {
-	return e.client.BlockByNumber(e.ctx, nil)
+func (e *EthService) LatestBlock() (*big.Int, error) {
+	blk, err := e.client.BlockByNumber(e.ctx, nil)
+	if err != nil {
+		return common.Big0, err
+	}
+
+	return blk.Number(), nil
 }
 
 func (e *EthService) BlockByNumber(number *big.Int) (*types.Block, error) {

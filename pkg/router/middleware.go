@@ -223,14 +223,11 @@ func withMultiPartSignature(h http.HandlerFunc) http.HandlerFunc {
 
 // withJSONRPCRequest is a middleware that handles a JSON RPC request
 func withJSONRPCRequest(hmap map[string]http.HandlerFunc) http.HandlerFunc {
-	println("setting up handler for json rpc request...")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		println("handling json rpc request")
 
 		// parse request
 		var req indexer.JsonRPCRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			println(err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -239,17 +236,12 @@ func withJSONRPCRequest(hmap map[string]http.HandlerFunc) http.HandlerFunc {
 		// check if the method is available
 		h, ok := hmap[req.Method]
 		if !ok {
-			println("did not find method")
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
-		println("passing params: ", string(req.Params))
-
 		r.Body = io.NopCloser(strings.NewReader(string(req.Params)))
 		r.ContentLength = int64(len([]byte(req.Params)))
-
-		println("all good")
 
 		h(w, r)
 		return

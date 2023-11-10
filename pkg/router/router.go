@@ -17,7 +17,7 @@ import (
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/internal/userop"
-	"github.com/citizenwallet/indexer/pkg/index"
+	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -28,14 +28,14 @@ type Router struct {
 	epAddr       string
 	accFactAddr  string
 	prfAddr      string
-	evm          index.EVMRequester
+	evm          indexer.EVMRequester
 	db           *db.DB
 	b            *bucket.Bucket
 	firebase     *firebase.PushService
 	paymasterKey *ecdsa.PrivateKey
 }
 
-func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm index.EVMRequester, db *db.DB, b *bucket.Bucket, firebase *firebase.PushService, pk *ecdsa.PrivateKey) *Router {
+func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm indexer.EVMRequester, db *db.DB, b *bucket.Bucket, firebase *firebase.PushService, pk *ecdsa.PrivateKey) *Router {
 	return &Router{
 		chainId,
 		apiKey,

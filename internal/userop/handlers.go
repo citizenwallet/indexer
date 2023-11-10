@@ -10,7 +10,6 @@ import (
 	"time"
 
 	comm "github.com/citizenwallet/indexer/internal/common"
-	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
@@ -23,13 +22,13 @@ import (
 )
 
 type Service struct {
-	evm index.EVMRequester
+	evm indexer.EVMRequester
 
 	paymasterKey *ecdsa.PrivateKey
 }
 
 // NewService
-func NewService(evm index.EVMRequester, pk *ecdsa.PrivateKey) *Service {
+func NewService(evm indexer.EVMRequester, pk *ecdsa.PrivateKey) *Service {
 	return &Service{
 		evm,
 		pk,
@@ -43,7 +42,7 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	addr := common.HexToAddress(contractAddr)
 
 	// Get the contract's bytecode
-	bytecode, err := s.evm.Client().CodeAt(context.Background(), addr, nil)
+	bytecode, err := s.evm.CodeAt(context.Background(), addr, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -56,7 +55,7 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// instantiate paymaster contract
-	pm, err := pay.NewPaymaster(addr, s.evm.Client())
+	pm, err := pay.NewPaymaster(addr, s.evm.Backend())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -194,7 +193,7 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Client())
+	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Backend())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -206,12 +205,5 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Wait for the transaction to be mined
-	receipt, err := bind.WaitMined(context.Background(), s.evm.Client(), tx)
-	if err != nil || receipt.Status != 1 {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	comm.JSONRPCBody(w, userop, nil)
+	comm.JSONRPCBody(w, tx.Hash().Hex(), nil)
 }

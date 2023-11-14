@@ -131,8 +131,6 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 }
 
 func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
-	log.Default().Println("indexing event: ", ev.Contract, ev.Standard, " from block: ", ev.LastBlock, " to block: ", curr.Int64(), " ...")
-
 	// check if the event last block matches the latest block of the chain
 	if ev.LastBlock >= curr.Int64() {
 		// event is up to date
@@ -141,7 +139,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			return err
 		}
 
-		log.Default().Println("nothing to do")
 		return nil
 	}
 
@@ -205,8 +202,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			startBlock = ev.LastBlock + 1
 		}
 
-		log.Default().Println("indexing block: ", startBlock, " to block: ", blockNum, " ...")
-
 		query := ethereum.FilterQuery{
 			FromBlock: big.NewInt(startBlock),
 			ToBlock:   big.NewInt(blockNum),
@@ -216,8 +211,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 
 		logs, err := i.evm.FilterLogs(query)
 		if err != nil {
-			println("i.evm.FilterLogs")
-			println(err.Error())
 			return ErrIndexingRecoverable
 		}
 
@@ -227,7 +220,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			// store a map of blocks by block number
 			blks := make(map[int64]uint64)
 
-			for index, l := range logs {
+			for _, l := range logs {
 				// to reduce API consumption, cache blocks by number
 
 				// check if it was already fetched
@@ -244,10 +237,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 				}
 
 				blktime := time.UnixMilli(int64(blk) * 1000).UTC()
-
-				if index == 0 {
-					log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " [", blktime, "] ...")
-				}
 
 				switch ev.Standard {
 				case indexer.ERC20:
@@ -290,7 +279,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 						hash, _ := txdb.TransferSimilarExists(tx.From, tx.To, tx.Value.String())
 
 						if hash != "" {
-							log.Default().Println("optimistic tx found: ", hash, " ", tx.Nonce)
 							// there is an optimistic transaction, set its tx_hash and status
 							err = txdb.ReconcileTx(tx.TxHash, hash, tx.Nonce)
 							if err != nil {
@@ -387,19 +375,14 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 		return err
 	}
 
-	log.Default().Println("done")
-
 	return nil
 }
 
 func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
-	log.Default().Println("indexing event: ", ev.Contract, ev.Standard, " from block: ", ev.LastBlock, " to block: ", curr.Int64(), " ...")
-
 	// check if the event last block matches the latest block of the chain
 	if from.Int64() >= curr.Int64() {
 		// event is up to date
 
-		log.Default().Println("nothing to do")
 		return nil
 	}
 
@@ -469,7 +452,7 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 			// store a map of blocks by block number
 			blks := make(map[int64]uint64)
 
-			for index, l := range logs {
+			for _, l := range logs {
 				// to reduce API consumption, cache blocks by number
 
 				// check if it was already fetched
@@ -486,10 +469,6 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 				}
 
 				blktime := time.UnixMilli(int64(blk) * 1000).UTC()
-
-				if index == 0 {
-					log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " [", blktime, "] ...")
-				}
 
 				switch ev.Standard {
 				case indexer.ERC20:
@@ -532,7 +511,6 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 						hash, _ := txdb.TransferSimilarExists(tx.From, tx.To, tx.Value.String())
 
 						if hash != "" {
-							log.Default().Println("optimistic tx found: ", hash, " ", tx.Nonce)
 							// there is an optimistic transaction, set its tx_hash and status
 							err = txdb.ReconcileTx(tx.TxHash, hash, tx.Nonce)
 							if err != nil {
@@ -567,8 +545,6 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 
 		blockNum = startBlock - 1
 	}
-
-	log.Default().Println("done")
 
 	return nil
 }

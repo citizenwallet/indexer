@@ -315,7 +315,7 @@ func (db *TransferDB) RemovePendingTransfer(hash string) error {
 
 // GetTransfer returns the transfer for a given hash
 func (db *TransferDB) GetTransfer(hash string) (*indexer.Transfer, error) {
-	var transfer *indexer.Transfer
+	var transfer indexer.Transfer
 	var value string
 
 	row := db.rdb.QueryRow(fmt.Sprintf(`
@@ -332,7 +332,7 @@ func (db *TransferDB) GetTransfer(hash string) (*indexer.Transfer, error) {
 	transfer.Value = new(big.Int)
 	transfer.Value.SetString(value, 10)
 
-	return transfer, nil
+	return &transfer, nil
 }
 
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated

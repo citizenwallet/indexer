@@ -209,7 +209,7 @@ func (s *Service) SetStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	if req.UUID == "" {
+	if hash == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -220,7 +220,7 @@ func (s *Service) SetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := tdb.GetTransfer(req.UUID)
+	tx, err := tdb.GetTransfer(hash)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return

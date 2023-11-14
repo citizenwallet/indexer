@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/citizenwallet/indexer/internal/common"
+	com "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/pkg/indexer"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -27,21 +28,13 @@ func (s *Service) AddToken(w http.ResponseWriter, r *http.Request) {
 	// parse contract address from url params
 	contractAddr := chi.URLParam(r, "contract_address")
 
-	// the account should match the one in the headers
-	haddr, ok := indexer.GetAddressFromContext(r.Context())
-	if !ok {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+	// parse address from url params
+	accaddr := chi.URLParam(r, "acc_addr")
 
-	acc, err := s.comm.GetAccount(haddr)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	acc := common.HexToAddress(accaddr)
 
 	var pt indexer.PushToken
-	err = json.NewDecoder(r.Body).Decode(&pt)
+	err := json.NewDecoder(r.Body).Decode(&pt)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -49,10 +42,10 @@ func (s *Service) AddToken(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	// make sure the addresses are EIP55 checksummed
-	pt.Account = common.ChecksumAddress(pt.Account)
+	pt.Account = com.ChecksumAddress(pt.Account)
 
 	// check that the push token is from the sender of the transaction
-	if !common.IsSameHexAddress(pt.Account, acc.Hex()) {
+	if !com.IsSameHexAddress(pt.Account, acc.Hex()) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -71,7 +64,7 @@ func (s *Service) AddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = common.Body(w, pt, nil)
+	err = com.Body(w, pt, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -82,31 +75,13 @@ func (s *Service) RemoveAccountToken(w http.ResponseWriter, r *http.Request) {
 	contractAddr := chi.URLParam(r, "contract_address")
 
 	// parse address from url params
-	accaddr := chi.URLParam(r, "addr")
+	accaddr := chi.URLParam(r, "acc_addr")
 
 	// parse token from url params
 	token := chi.URLParam(r, "token")
 
 	if token == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	// the account should match the one in the headers
-	haddr, ok := indexer.GetAddressFromContext(r.Context())
-	if !ok {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	acc, err := s.comm.GetAccount(haddr)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	if !common.IsSameHexAddress(acc.Hex(), accaddr) {
-		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
@@ -118,13 +93,13 @@ func (s *Service) RemoveAccountToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = pdb.RemoveAccountPushToken(token, accaddr)
+	err := pdb.RemoveAccountPushToken(token, accaddr)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	err = common.Body(w, []byte("{}"), nil)
+	err = com.Body(w, []byte("{}"), nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}

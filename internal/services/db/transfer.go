@@ -313,6 +313,28 @@ func (db *TransferDB) RemovePendingTransfer(hash string) error {
 	return err
 }
 
+// GetTransfer returns the transfer for a given hash
+func (db *TransferDB) GetTransfer(hash string) (*indexer.Transfer, error) {
+	var transfer *indexer.Transfer
+	var value string
+
+	row := db.rdb.QueryRow(fmt.Sprintf(`
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
+		FROM t_transfers_%s
+		WHERE hash = $1
+		`, db.suffix), hash)
+
+	err := row.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
+	if err != nil {
+		return nil, err
+	}
+
+	transfer.Value = new(big.Int)
+	transfer.Value.SetString(value, 10)
+
+	return transfer, nil
+}
+
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated
 func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate time.Time, limit, offset int) ([]*indexer.Transfer, error) {
 	transfers := []*indexer.Transfer{}

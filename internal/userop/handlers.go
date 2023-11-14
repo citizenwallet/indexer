@@ -151,7 +151,6 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	// Get the hash of the message that was signed
 	hash, err := pm.GetHash(nil, pay.UserOperation(userop), validUntil, validAfter)
 	if err != nil {
-		println(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

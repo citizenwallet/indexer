@@ -67,7 +67,7 @@ func (r *Router) Start(port int) error {
 	cr.Use(middleware.Compress(9))
 
 	// instantiate handlers
-	l := logs.NewService(r.chainId, r.db, comm)
+	l := logs.NewService(r.chainId, r.db, r.evm)
 	ev := events.NewService(r.db)
 	pr := profiles.NewService(r.b, comm)
 	pu := push.NewService(r.db, comm)
@@ -78,12 +78,12 @@ func (r *Router) Start(port int) error {
 	// configure routes
 	cr.Route("/logs/transfers", func(cr chi.Router) {
 		cr.Route("/{contract_address}", func(cr chi.Router) {
-			cr.Get("/{addr}", l.Get)
-			cr.Get("/{addr}/new", l.GetNew)
+			cr.Get("/{acc_addr}", l.Get)
+			cr.Get("/{acc_addr}/new", l.GetNew)
 
-			cr.Post("/{addr}", withSignature(l.AddSending))
+			cr.Post("/{acc_addr}", withSignature(r.evm, l.AddSending))
 
-			cr.Patch("/{addr}/{hash}", withSignature(l.SetStatus))
+			cr.Patch("/{acc_addr}/{hash}", withSignature(r.evm, l.SetStatus))
 		})
 	})
 
@@ -92,14 +92,14 @@ func (r *Router) Start(port int) error {
 	})
 
 	cr.Route("/profiles", func(cr chi.Router) {
-		cr.Put("/{addr}", withMultiPartSignature(pr.PinMultiPartProfile))
-		cr.Patch("/{addr}", withSignature(pr.PinProfile))
-		cr.Delete("/{addr}", withSignature(pr.Unpin))
+		cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, pr.PinMultiPartProfile))
+		cr.Patch("/{acc_addr}", withSignature(r.evm, pr.PinProfile))
+		cr.Delete("/{acc_addr}", withSignature(r.evm, pr.Unpin))
 	})
 
 	cr.Route("/push/{contract_address}", func(cr chi.Router) {
-		cr.Put("/", withSignature(pu.AddToken))
-		cr.Delete("/{addr}/{token}", withSignature(pu.RemoveAccountToken))
+		cr.Put("/{acc_addr}", withSignature(r.evm, pu.AddToken))
+		cr.Delete("/{acc_addr}/{token}", withSignature(r.evm, pu.RemoveAccountToken))
 	})
 
 	cr.Route("/rpc/{contract_address}", func(cr chi.Router) {

@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/citizenwallet/indexer/internal/common"
+	com "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/pkg/indexer"
+
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -30,35 +32,21 @@ type pinResponse struct {
 // PinProfile handler for pinning profile to ipfs
 func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 	// parse address from url params
-	accaddr := chi.URLParam(r, "addr")
+	accaddr := chi.URLParam(r, "acc_addr")
 
-	// the address in the url should match the one in the headers
-	haddr, ok := indexer.GetAddressFromContext(r.Context())
-	if !ok {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	acc, err := s.comm.GetAccount(haddr)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	if !common.IsSameHexAddress(acc.Hex(), accaddr) {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+	acc := common.HexToAddress(accaddr)
 
 	var profile indexer.Profile
-	err = json.NewDecoder(r.Body).Decode(&profile)
+	err := json.NewDecoder(r.Body).Decode(&profile)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
 
-	if !common.IsSameHexAddress(accaddr, profile.Account) {
+	praddr := common.HexToAddress(profile.Account)
+
+	if acc != praddr {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -89,7 +77,7 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}(acc.Hex())
 
-	err = common.Body(w, &pinResponse{IpfsURL: uri}, nil)
+	err = com.Body(w, &pinResponse{IpfsURL: uri}, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -105,25 +93,9 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// parse address from url params
-	accaddr := chi.URLParam(r, "addr")
+	accaddr := chi.URLParam(r, "acc_addr")
 
-	// the address in the url should match the one in the headers
-	haddr, ok := indexer.GetAddressFromContext(r.Context())
-	if !ok {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	acc, err := s.comm.GetAccount(haddr)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	if !common.IsSameHexAddress(acc.Hex(), accaddr) {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+	acc := common.HexToAddress(accaddr)
 
 	file, _, err := r.FormFile("file")
 	if err != nil {
@@ -133,7 +105,7 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	// parse image
-	si, err := common.ParseImage(file)
+	si, err := com.ParseImage(file)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -151,7 +123,9 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !common.IsSameHexAddress(accaddr, profile.Account) {
+	praddr := common.HexToAddress(profile.Account)
+
+	if acc != praddr {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -209,7 +183,7 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}(acc.Hex())
 
-	err = common.Body(w, &pinResponse{IpfsURL: uri}, nil)
+	err = com.Body(w, &pinResponse{IpfsURL: uri}, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -218,28 +192,12 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 // Unpin handler for unpinning profile from ipfs
 func (s *Service) Unpin(w http.ResponseWriter, r *http.Request) {
 	// parse address from url params
-	accaddr := chi.URLParam(r, "addr")
+	accaddr := chi.URLParam(r, "acc_addr")
 
-	// the address in the url should match the one in the headers
-	haddr, ok := indexer.GetAddressFromContext(r.Context())
-	if !ok {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	acc, err := s.comm.GetAccount(haddr)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	if !common.IsSameHexAddress(acc.Hex(), accaddr) {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+	acc := common.HexToAddress(accaddr)
 
 	// get the hash from the profile contract, makes sure that users can only delete their own profile
-	hash, err := s.comm.Profile.Get(nil, *acc)
+	hash, err := s.comm.Profile.Get(nil, acc)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return

@@ -152,16 +152,6 @@ func withSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFun
 
 		haccaddr := common.HexToAddress(addr)
 
-		// parse address from url params
-		accaddr := chi.URLParam(r, "acc_addr")
-
-		acc := common.HexToAddress(accaddr)
-
-		if haccaddr != acc {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
 		// check signature
 		switch req.Version {
 		case 0:
@@ -179,6 +169,16 @@ func withSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFun
 				return
 			}
 		default:
+			// parse address from url params
+			accaddr := chi.URLParam(r, "acc_addr")
+
+			acc := common.HexToAddress(accaddr)
+
+			if haccaddr != acc {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+
 			if !verify1271Signature(evm, req, haccaddr, signature) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
@@ -223,16 +223,6 @@ func withMultiPartSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.H
 
 		haccaddr := common.HexToAddress(addr)
 
-		// parse address from url params
-		accaddr := chi.URLParam(r, "acc_addr")
-
-		acc := common.HexToAddress(accaddr)
-
-		if haccaddr != acc {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
 		// check signature
 		switch req.Version {
 		case 0:
@@ -250,6 +240,16 @@ func withMultiPartSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.H
 				return
 			}
 		default:
+			// parse address from url params
+			accaddr := chi.URLParam(r, "acc_addr")
+
+			acc := common.HexToAddress(accaddr)
+
+			if haccaddr != acc {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+
 			if !verify1271Signature(evm, req, haccaddr, signature) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return

@@ -61,6 +61,10 @@ func (r *Router) Start(port int) error {
 	}
 
 	// configure middleware
+	cr.Use(middleware.RequestID)
+	cr.Use(middleware.Logger)
+
+	// configure custom middleware
 	cr.Use(OptionsMiddleware)
 	cr.Use(HealthMiddleware)
 	cr.Use(a.AuthMiddleware)
@@ -69,7 +73,8 @@ func (r *Router) Start(port int) error {
 	// instantiate handlers
 	l := logs.NewService(r.chainId, r.db, r.evm)
 	ev := events.NewService(r.db)
-	pr := profiles.NewService(r.b, comm)
+	pr := profiles.NewService(r.b, r.evm, comm)
+	legpr := profiles.NewLegacyService(r.b, comm)
 	pu := push.NewService(r.db, comm)
 
 	pm := paymaster.NewService(r.evm, r.paymasterKey)
@@ -92,9 +97,16 @@ func (r *Router) Start(port int) error {
 	})
 
 	cr.Route("/profiles", func(cr chi.Router) {
-		cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, pr.PinMultiPartProfile))
-		cr.Patch("/{acc_addr}", withSignature(r.evm, pr.PinProfile))
-		cr.Delete("/{acc_addr}", withSignature(r.evm, pr.Unpin))
+		// legacy support: added 14/11/2023
+		cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, legpr.PinMultiPartProfile))
+		cr.Patch("/{acc_addr}", withSignature(r.evm, legpr.PinProfile))
+		cr.Delete("/{acc_addr}", withSignature(r.evm, legpr.Unpin))
+
+		cr.Route("/v2/{contract_address}", func(cr chi.Router) {
+			cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, pr.PinMultiPartProfile))
+			cr.Patch("/{acc_addr}", withSignature(r.evm, pr.PinProfile))
+			cr.Delete("/{acc_addr}", withSignature(r.evm, pr.Unpin))
+		})
 	})
 
 	cr.Route("/push/{contract_address}", func(cr chi.Router) {

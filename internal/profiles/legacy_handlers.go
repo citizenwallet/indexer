@@ -1,69 +1,50 @@
 package profiles
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
-	com "github.com/citizenwallet/indexer/internal/common"
+	"github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/pkg/indexer"
-	"github.com/citizenwallet/smartcontracts/pkg/contracts/profile"
-
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/chi/v5"
 )
 
-type Service struct {
+type LegacyService struct {
 	b    *bucket.Bucket
-	evm  indexer.EVMRequester
 	comm *ethrequest.Community
 }
 
-func NewService(b *bucket.Bucket, evm indexer.EVMRequester, comm *ethrequest.Community) *Service {
-	return &Service{
+func NewLegacyService(b *bucket.Bucket, comm *ethrequest.Community) *LegacyService {
+	return &LegacyService{
 		b:    b,
-		evm:  evm,
 		comm: comm,
 	}
 }
 
-type pinResponse struct {
-	IpfsURL string `json:"ipfs_url"`
-}
-
 // PinProfile handler for pinning profile to ipfs
-func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
-	// parse profile address from url params
-	prfaddr := chi.URLParam(r, "contract_address")
-
-	prf := common.HexToAddress(prfaddr)
-
-	// Get the contract's bytecode
-	bytecode, err := s.evm.CodeAt(context.Background(), prf, nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Check if the profile contract is deployed
-	if len(bytecode) == 0 {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// instantiate profile contract
-	prfcontract, err := profile.NewProfile(prf, s.evm.Backend())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+func (s *LegacyService) PinProfile(w http.ResponseWriter, r *http.Request) {
 	// parse address from url params
 	accaddr := chi.URLParam(r, "acc_addr")
 
-	acc := common.HexToAddress(accaddr)
+	// the address in the url should match the one in the headers
+	haddr, ok := indexer.GetAddressFromContext(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	acc, err := s.comm.GetAccount(haddr)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if !common.IsSameHexAddress(acc.Hex(), accaddr) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
 	var profile indexer.Profile
 	err = json.NewDecoder(r.Body).Decode(&profile)
@@ -73,9 +54,7 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	praddr := common.HexToAddress(profile.Account)
-
-	if acc != praddr {
+	if !common.IsSameHexAddress(accaddr, profile.Account) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -93,10 +72,10 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go func(acchex common.Address) {
+	go func(acchex string) {
 		// update was successful, we can delete the old one
 		// get the hash from the profile contract
-		hash, err := prfcontract.Get(nil, acchex)
+		hash, err := s.comm.GetProfile(acchex)
 		if err == nil {
 			err = s.b.Unpin(r.Context(), hash)
 			if err != nil {
@@ -104,16 +83,16 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 				// pinning the new one was successful, but unpinning the old one failed
 			}
 		}
-	}(acc)
+	}(acc.Hex())
 
-	err = com.Body(w, &pinResponse{IpfsURL: uri}, nil)
+	err = common.Body(w, &pinResponse{IpfsURL: uri}, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
 // PinMultiPartProfile handler for pinning profile to ipfs
-func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
+func (s *LegacyService) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 	// Parse the form data to get the uploaded file
 	err := r.ParseMultipartForm(10 << 20) // 10 MB limit (adjust as needed)
 	if err != nil {
@@ -121,35 +100,26 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// parse profile address from url params
-	prfaddr := chi.URLParam(r, "contract_address")
-
-	prf := common.HexToAddress(prfaddr)
-
-	// Get the contract's bytecode
-	bytecode, err := s.evm.CodeAt(context.Background(), prf, nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Check if the profile contract is deployed
-	if len(bytecode) == 0 {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// instantiate profile contract
-	prfcontract, err := profile.NewProfile(prf, s.evm.Backend())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	// parse address from url params
 	accaddr := chi.URLParam(r, "acc_addr")
 
-	acc := common.HexToAddress(accaddr)
+	// the address in the url should match the one in the headers
+	haddr, ok := indexer.GetAddressFromContext(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	acc, err := s.comm.GetAccount(haddr)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if !common.IsSameHexAddress(acc.Hex(), accaddr) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
 	file, _, err := r.FormFile("file")
 	if err != nil {
@@ -159,7 +129,7 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	// parse image
-	si, err := com.ParseImage(file)
+	si, err := common.ParseImage(file)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -177,9 +147,7 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	praddr := common.HexToAddress(profile.Account)
-
-	if acc != praddr {
+	if !common.IsSameHexAddress(accaddr, profile.Account) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -224,10 +192,10 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go func(acchex common.Address) {
+	go func(acchex string) {
 		// update was successful, we can delete the old one
 		// get the hash from the profile contract
-		hash, err := prfcontract.Get(nil, acchex)
+		hash, err := s.comm.GetProfile(acchex)
 		if err == nil {
 			err = s.b.Unpin(r.Context(), hash)
 			if err != nil {
@@ -235,48 +203,39 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 				// pinning the new one was successful, but unpinning the old one failed
 			}
 		}
-	}(acc)
+	}(acc.Hex())
 
-	err = com.Body(w, &pinResponse{IpfsURL: uri}, nil)
+	err = common.Body(w, &pinResponse{IpfsURL: uri}, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
 // Unpin handler for unpinning profile from ipfs
-func (s *Service) Unpin(w http.ResponseWriter, r *http.Request) {
-	// parse profile address from url params
-	prfaddr := chi.URLParam(r, "contract_address")
-
-	prf := common.HexToAddress(prfaddr)
-
-	// Get the contract's bytecode
-	bytecode, err := s.evm.CodeAt(context.Background(), prf, nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Check if the profile contract is deployed
-	if len(bytecode) == 0 {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// instantiate profile contract
-	prfcontract, err := profile.NewProfile(prf, s.evm.Backend())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+func (s *LegacyService) Unpin(w http.ResponseWriter, r *http.Request) {
 	// parse address from url params
 	accaddr := chi.URLParam(r, "acc_addr")
 
-	acc := common.HexToAddress(accaddr)
+	// the address in the url should match the one in the headers
+	haddr, ok := indexer.GetAddressFromContext(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	acc, err := s.comm.GetAccount(haddr)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if !common.IsSameHexAddress(acc.Hex(), accaddr) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
 	// get the hash from the profile contract, makes sure that users can only delete their own profile
-	hash, err := prfcontract.Get(nil, acc)
+	hash, err := s.comm.Profile.Get(nil, *acc)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return

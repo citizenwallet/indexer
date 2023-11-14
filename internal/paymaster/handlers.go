@@ -179,7 +179,7 @@ func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// if the nonce is 0, then check that the factory returns the sender
+	// if the nonce is 0, then check that the factory exists
 	if nonce.Cmp(big.NewInt(0)) == 0 {
 		factoryaddr := common.BytesToAddress(userop.InitCode[:20])
 

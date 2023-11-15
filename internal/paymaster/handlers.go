@@ -55,7 +55,7 @@ type paymasterData struct {
 
 func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contract_address")
+	contractAddr := chi.URLParam(r, "pm_address")
 
 	addr := common.HexToAddress(contractAddr)
 

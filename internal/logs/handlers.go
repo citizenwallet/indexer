@@ -11,6 +11,7 @@ import (
 	com "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/pkg/indexer"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -29,9 +30,23 @@ func NewService(chainID *big.Int, db *db.DB, evm indexer.EVMRequester) *Service 
 	}
 }
 
+// Get godoc
+//
+//		@Summary		Fetch transfer logs
+//		@Description	get transfer logs for a given token and account
+//		@Tags			logs
+//		@Accept			json
+//		@Produce		json
+//		@Param			token_address	path		string	true	"Token Contract Address"
+//	 	@Param			acc_address	path		string	true	"Address of the account"
+//		@Success		200	{object}	common.Response
+//		@Failure		400
+//		@Failure		404
+//		@Failure		500
+//		@Router			/logs/transfers/{token_address}/{acc_addr} [get]
 func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contract_address")
+	contractAddr := chi.URLParam(r, "token_address")
 
 	// parse address from url params
 	accaddr := chi.URLParam(r, "acc_addr")
@@ -91,7 +106,7 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contract_address")
+	contractAddr := chi.URLParam(r, "token_address")
 
 	// parse address from url params
 	accaddr := chi.URLParam(r, "acc_addr")
@@ -141,11 +156,27 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) AddSending(w http.ResponseWriter, r *http.Request) {
-	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contract_address")
+	// ensure that the address in the url matches the one in the headers
+	addr, ok := com.GetContextAddress(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	haccaddr := common.HexToAddress(addr)
 
 	// parse address from url params
 	accaddr := chi.URLParam(r, "acc_addr")
+
+	acc := common.HexToAddress(accaddr)
+
+	if haccaddr != acc {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// parse contract address from url params
+	contractAddr := chi.URLParam(r, "token_address")
 
 	var log indexer.Transfer
 	err := json.NewDecoder(r.Body).Decode(&log)
@@ -192,11 +223,27 @@ type setStatusRequest struct {
 }
 
 func (s *Service) SetStatus(w http.ResponseWriter, r *http.Request) {
-	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contract_address")
+	// ensure that the address in the url matches the one in the headers
+	addr, ok := com.GetContextAddress(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	haccaddr := common.HexToAddress(addr)
 
 	// parse address from url params
 	accaddr := chi.URLParam(r, "acc_addr")
+
+	acc := common.HexToAddress(accaddr)
+
+	if haccaddr != acc {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// parse contract address from url params
+	contractAddr := chi.URLParam(r, "token_address")
 
 	// parse hash from url params
 	hash := chi.URLParam(r, "hash")

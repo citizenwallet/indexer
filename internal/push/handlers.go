@@ -25,13 +25,27 @@ func NewService(db *db.DB, comm *ethrequest.Community) *Service {
 }
 
 func (s *Service) AddToken(w http.ResponseWriter, r *http.Request) {
-	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contract_address")
+	// ensure that the address in the url matches the one in the headers
+	addr, ok := com.GetContextAddress(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	haccaddr := common.HexToAddress(addr)
 
 	// parse address from url params
 	accaddr := chi.URLParam(r, "acc_addr")
 
 	acc := common.HexToAddress(accaddr)
+
+	if haccaddr != acc {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// parse contract address from url params
+	contractAddr := chi.URLParam(r, "contract_address")
 
 	var pt indexer.PushToken
 	err := json.NewDecoder(r.Body).Decode(&pt)
@@ -71,11 +85,27 @@ func (s *Service) AddToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) RemoveAccountToken(w http.ResponseWriter, r *http.Request) {
-	// parse contract address from url params
-	contractAddr := chi.URLParam(r, "contract_address")
+	// ensure that the address in the url matches the one in the headers
+	addr, ok := com.GetContextAddress(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	haccaddr := common.HexToAddress(addr)
 
 	// parse address from url params
 	accaddr := chi.URLParam(r, "acc_addr")
+
+	acc := common.HexToAddress(accaddr)
+
+	if haccaddr != acc {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// parse contract address from url params
+	contractAddr := chi.URLParam(r, "contract_address")
 
 	// parse token from url params
 	token := chi.URLParam(r, "token")

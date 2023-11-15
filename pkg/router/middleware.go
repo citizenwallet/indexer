@@ -126,7 +126,7 @@ type signedBody struct {
 	Version  int          `json:"version"`
 }
 
-// withSignature is a middleware that checks the signature of the request against the request body
+// withSignature is a middleware that checks the signature of the request against the request headers
 func withSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// check signature
@@ -169,16 +169,6 @@ func withSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFun
 				return
 			}
 		default:
-			// parse address from url params
-			accaddr := chi.URLParam(r, "acc_addr")
-
-			acc := common.HexToAddress(accaddr)
-
-			if haccaddr != acc {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-
 			if !verify1271Signature(evm, req, haccaddr, signature) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
@@ -196,7 +186,7 @@ func withSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFun
 	})
 }
 
-// withMultiPartSignature is a middleware that checks the signature of the request against a multi-part request body
+// withMultiPartSignature is a middleware that checks the signature of the request against a multi-part request headers
 func withMultiPartSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// check signature
@@ -240,16 +230,6 @@ func withMultiPartSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.H
 				return
 			}
 		default:
-			// parse address from url params
-			accaddr := chi.URLParam(r, "acc_addr")
-
-			acc := common.HexToAddress(accaddr)
-
-			if haccaddr != acc {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-
 			if !verify1271Signature(evm, req, haccaddr, signature) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
@@ -259,6 +239,93 @@ func withMultiPartSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.H
 		r.MultipartForm.Value["body"] = []string{string(req.Data)}
 
 		ctx := context.WithValue(r.Context(), indexer.ContextKeyAddress, addr)
+
+		h(w, r.WithContext(ctx))
+		return
+	})
+}
+
+// withOwnerSignature is a middleware that checks the owner's signature of the request against the request headers
+// used in scenarios where on-chain verification is not possible
+func withOwnerSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// parse signature from header
+		signature := r.Header.Get(indexer.SignatureHeader)
+		if signature == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		var req signedBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		// get address
+		addr := r.Header.Get(indexer.AddressHeader)
+		if addr == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		haccaddr := common.HexToAddress(addr)
+
+		// check signature
+		if !verifyV2Signature(req, haccaddr, signature) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		r.Body = io.NopCloser(strings.NewReader(string(req.Data)))
+		r.ContentLength = int64(len(req.Data))
+
+		ctx := context.WithValue(r.Context(), indexer.ContextKeyAddress, addr)
+		ctx = context.WithValue(ctx, indexer.ContextKeySignature, signature)
+
+		h(w, r.WithContext(ctx))
+		return
+	})
+}
+
+// with1271Signature is a middleware that checks the owner's signature of the request against the request headers and the actual account on-chain
+func with1271Signature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// parse signature from header
+		signature := r.Header.Get(indexer.SignatureHeader)
+		if signature == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		var req signedBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		// get address
+		addr := r.Header.Get(indexer.AddressHeader)
+		if addr == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		haccaddr := common.HexToAddress(addr)
+
+		// check signature
+		if !verify1271Signature(evm, req, haccaddr, signature) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		r.Body = io.NopCloser(strings.NewReader(string(req.Data)))
+		r.ContentLength = int64(len(req.Data))
+
+		ctx := context.WithValue(r.Context(), indexer.ContextKeyAddress, addr)
+		ctx = context.WithValue(ctx, indexer.ContextKeySignature, signature)
 
 		h(w, r.WithContext(ctx))
 		return

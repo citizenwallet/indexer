@@ -183,6 +183,19 @@ func (e *EthService) GetCode(address common.Address) ([]byte, error) {
 	return e.client.CodeAt(e.ctx, address, nil)
 }
 
+func (e *EthService) WaitForTx(tx *types.Transaction) error {
+	rcpt, err := bind.WaitMined(e.ctx, e.client, tx)
+	if err != nil {
+		return err
+	}
+
+	if rcpt.Status != types.ReceiptStatusSuccessful {
+		return errors.New("tx failed")
+	}
+
+	return nil
+}
+
 func makeValidEvenHex(h string) string {
 	h = strip0x(h)
 	h = evenHex(h)

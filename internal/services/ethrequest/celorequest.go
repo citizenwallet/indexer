@@ -2,6 +2,7 @@ package ethrequest
 
 import (
 	"context"
+	"errors"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum"
@@ -92,4 +93,17 @@ func (e *CeloService) LatestBlock() (*big.Int, error) {
 
 func (e *CeloService) FilterLogs(q ethereum.FilterQuery) ([]types.Log, error) {
 	return e.client.FilterLogs(e.ctx, q)
+}
+
+func (e *CeloService) WaitForTx(tx *types.Transaction) error {
+	rcpt, err := bind.WaitMined(e.ctx, e.client, tx)
+	if err != nil {
+		return err
+	}
+
+	if rcpt.Status != types.ReceiptStatusSuccessful {
+		return errors.New("tx failed")
+	}
+
+	return nil
 }

@@ -35,6 +35,25 @@ type pinResponse struct {
 
 // PinProfile handler for pinning profile to ipfs
 func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
+	// ensure that the address in the url matches the one in the headers
+	addr, ok := com.GetContextAddress(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	haccaddr := common.HexToAddress(addr)
+
+	// parse address from url params
+	accaddr := chi.URLParam(r, "acc_addr")
+
+	acc := common.HexToAddress(accaddr)
+
+	if haccaddr != acc {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	// parse profile address from url params
 	prfaddr := chi.URLParam(r, "contract_address")
 
@@ -59,11 +78,6 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// parse address from url params
-	accaddr := chi.URLParam(r, "acc_addr")
-
-	acc := common.HexToAddress(accaddr)
 
 	var profile indexer.Profile
 	err = json.NewDecoder(r.Body).Decode(&profile)
@@ -121,6 +135,25 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ensure that the address in the url matches the one in the headers
+	addr, ok := com.GetContextAddress(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	haccaddr := common.HexToAddress(addr)
+
+	// parse address from url params
+	accaddr := chi.URLParam(r, "acc_addr")
+
+	acc := common.HexToAddress(accaddr)
+
+	if haccaddr != acc {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	// parse profile address from url params
 	prfaddr := chi.URLParam(r, "contract_address")
 
@@ -145,11 +178,6 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// parse address from url params
-	accaddr := chi.URLParam(r, "acc_addr")
-
-	acc := common.HexToAddress(accaddr)
 
 	file, _, err := r.FormFile("file")
 	if err != nil {
@@ -245,6 +273,25 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 
 // Unpin handler for unpinning profile from ipfs
 func (s *Service) Unpin(w http.ResponseWriter, r *http.Request) {
+	// ensure that the address in the url matches the one in the headers
+	addr, ok := com.GetContextAddress(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	haccaddr := common.HexToAddress(addr)
+
+	// parse address from url params
+	accaddr := chi.URLParam(r, "acc_addr")
+
+	acc := common.HexToAddress(accaddr)
+
+	if haccaddr != acc {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	// parse profile address from url params
 	prfaddr := chi.URLParam(r, "contract_address")
 
@@ -269,11 +316,6 @@ func (s *Service) Unpin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// parse address from url params
-	accaddr := chi.URLParam(r, "acc_addr")
-
-	acc := common.HexToAddress(accaddr)
 
 	// get the hash from the profile contract, makes sure that users can only delete their own profile
 	hash, err := prfcontract.Get(nil, acc)

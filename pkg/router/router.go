@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"net/http"
 
+	"github.com/citizenwallet/indexer/internal/accounts"
 	"github.com/citizenwallet/indexer/internal/auth"
 	"github.com/citizenwallet/indexer/internal/events"
 	"github.com/citizenwallet/indexer/internal/logs"
@@ -76,13 +77,14 @@ func (r *Router) Start(port int) error {
 	pr := profiles.NewService(r.b, r.evm, comm)
 	legpr := profiles.NewLegacyService(r.b, comm)
 	pu := push.NewService(r.db, comm)
+	acc := accounts.NewService(r.b, r.evm, r.paymasterKey)
 
 	pm := paymaster.NewService(r.evm, r.paymasterKey)
 	uop := userop.NewService(r.evm, r.paymasterKey)
 
 	// configure routes
 	cr.Route("/logs/transfers", func(cr chi.Router) {
-		cr.Route("/{contract_address}", func(cr chi.Router) {
+		cr.Route("/{token_address}", func(cr chi.Router) {
 			cr.Get("/{acc_addr}", l.Get)
 			cr.Get("/{acc_addr}/new", l.GetNew)
 
@@ -93,7 +95,7 @@ func (r *Router) Start(port int) error {
 	})
 
 	cr.Route("/events", func(cr chi.Router) {
-		cr.Post("/", ev.AddEvent)
+		cr.Post("/", ev.AddEvent) // TODO: add auth
 	})
 
 	cr.Route("/profiles", func(cr chi.Router) {
@@ -114,7 +116,14 @@ func (r *Router) Start(port int) error {
 		cr.Delete("/{acc_addr}/{token}", withSignature(r.evm, pu.RemoveAccountToken))
 	})
 
-	cr.Route("/rpc/{contract_address}", func(cr chi.Router) {
+	cr.Route("/accounts", func(cr chi.Router) {
+		cr.Route("/factory/{factory_address}", func(cr chi.Router) {
+			cr.Post("/", withOwnerSignature(r.evm, acc.Create))
+			cr.Patch("/sca/{acc_addr}", with1271Signature(r.evm, acc.Upgrade))
+		})
+	})
+
+	cr.Route("/rpc/{pm_address}", func(cr chi.Router) {
 		cr.Post("/", withJSONRPCRequest(map[string]http.HandlerFunc{
 			"pm_sponsorUserOperation": pm.Sponsor,
 			"eth_sendUserOperation":   uop.Send,

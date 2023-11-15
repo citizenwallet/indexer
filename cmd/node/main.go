@@ -1,5 +1,4 @@
-//go:build (darwin && cgo) || linux
-// +build darwin,cgo linux
+//go:generate swagger generate spec
 
 package main
 
@@ -23,6 +22,25 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
+// @title           Citizen Wallet Indexer API
+// @version         1.0
+// @description     This is a server which handles token contract indexing, user operations, and other support functions for the app.
+// @termsOfService  https://citizenwallet.xyz
+
+// @contact.name   API Support
+// @contact.url    https://github.com/citizenwallet
+// @contact.email  support@citizenspring.earth
+
+// @license.name  MIT
+// @license.url   https://raw.githubusercontent.com/citizenwallet/indexer/main/LICENSE
+
+// @host      localhost:3000
+// @BasePath  /
+
+// @securityDefinitions.basic  Authorization Bearer
+
+// @externalDocs.description  OpenAPI
+// @externalDocs.url          https://swagger.io/resources/open-api/
 func main() {
 	log.Default().Println("launching indexer...")
 

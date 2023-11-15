@@ -27,9 +27,12 @@ type Pagination struct {
 	Total  int `json:"total"`
 }
 
+// Response is the default response object
+// swagger:response defaultResponse
 type Response struct {
+	// The response type
+	// in: body
 	ResponseType ResponseType `json:"response_type"`
-	Secure       string       `json:"secure,omitempty"`
 	Object       any          `json:"object,omitempty"`
 	Array        any          `json:"array,omitempty"`
 	Meta         any          `json:"meta,omitempty"`

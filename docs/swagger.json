@@ -1,0 +1,51 @@
+{
+  "swagger": "2.0",
+  "paths": {
+    "/logs/transfers/{token_address}": {
+      "get": {
+        "security": [
+          {
+            "api_key": []
+          }
+        ],
+        "description": "This will show all available pets by default.\nYou can get the pets that are out of stock",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "http",
+          "https"
+        ],
+        "tags": [
+          "pets",
+          "users"
+        ],
+        "summary": "Lists pets filtered by some parameters.",
+        "operationId": "listPets",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int32",
+            "description": "maximum numnber of results to return",
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/someResponse"
+          },
+          "422": {
+            "$ref": "#/responses/validationError"
+          },
+          "default": {
+            "$ref": "#/responses/genericError"
+          }
+        }
+      }
+    }
+  }
+}

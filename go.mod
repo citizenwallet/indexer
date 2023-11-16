@@ -6,7 +6,7 @@ toolchain go1.21.3
 
 require (
 	firebase.google.com/go/v4 v4.12.1
-	github.com/citizenwallet/smartcontracts v0.0.53
+	github.com/citizenwallet/smartcontracts v0.0.54
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/ethereum/go-ethereum v1.13.3
 	github.com/getsentry/sentry-go v0.22.0

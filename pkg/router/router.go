@@ -77,7 +77,7 @@ func (r *Router) Start(port int) error {
 	pr := profiles.NewService(r.b, r.evm, comm)
 	legpr := profiles.NewLegacyService(r.b, comm)
 	pu := push.NewService(r.db, comm)
-	acc := accounts.NewService(r.b, r.evm, r.paymasterKey)
+	acc := accounts.NewService(r.b, r.evm, r.epAddr, r.paymasterKey)
 
 	pm := paymaster.NewService(r.evm, r.paymasterKey)
 	uop := userop.NewService(r.evm, r.paymasterKey)
@@ -118,7 +118,7 @@ func (r *Router) Start(port int) error {
 
 	cr.Route("/accounts", func(cr chi.Router) {
 		cr.Route("/factory/{factory_address}", func(cr chi.Router) {
-			cr.Post("/", withOwnerSignature(r.evm, acc.Create))
+			cr.Post("/", with1271Signature(r.evm, acc.Create))
 			cr.Patch("/sca/{acc_addr}", with1271Signature(r.evm, acc.Upgrade))
 		})
 	})

@@ -6,15 +6,12 @@ import (
 	"encoding/json"
 	"math/big"
 	"net/http"
-	"strings"
 
 	com "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/accfactory"
-	"github.com/citizenwallet/smartcontracts/pkg/contracts/account"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/chi/v5"
@@ -24,13 +21,15 @@ type Service struct {
 	b   *bucket.Bucket
 	evm indexer.EVMRequester
 
+	entryPoint   common.Address
 	paymasterKey *ecdsa.PrivateKey
 }
 
-func NewService(b *bucket.Bucket, evm indexer.EVMRequester, paymasterKey *ecdsa.PrivateKey) *Service {
+func NewService(b *bucket.Bucket, evm indexer.EVMRequester, entryPoint string, paymasterKey *ecdsa.PrivateKey) *Service {
 	return &Service{
 		b:            b,
 		evm:          evm,
+		entryPoint:   common.HexToAddress(entryPoint),
 		paymasterKey: paymasterKey,
 	}
 }
@@ -85,7 +84,7 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Check if the account factory contract is deployed
 	if len(bytecode) == 0 {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "account contract is missing", http.StatusBadRequest)
 		return
 	}
 
@@ -112,7 +111,7 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Check if the account contract is already deployed
 	if len(bytecode) > 0 {
-		http.Error(w, err.Error(), http.StatusConflict)
+		http.Error(w, "account contract is already deployed", http.StatusConflict)
 		return
 	}
 
@@ -151,8 +150,11 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 type upgradeRequest struct {
 	Owner           string  `json:"owner"`
 	Salt            big.Int `json:"salt"`
-	EntryPoint      string  `json:"entry_point"`
 	TokenEntryPoint string  `json:"token_entry_point"`
+}
+
+type upgradeResponse struct {
+	AccountImplementation string `json:"account_implementation"`
 }
 
 // Upgrade handler for upgrading an account
@@ -200,7 +202,7 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 
 	// Check if the account factory contract is deployed
 	if len(bytecode) == 0 {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "account factory contract is missing", http.StatusBadRequest)
 		return
 	}
 
@@ -225,83 +227,63 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if the account contract is already deployed
-	if len(bytecode) > 0 {
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
+	// Check if the account contract is already deployed and deploy if missing
+	if len(bytecode) == 0 {
+		// upgrade account
+		chainId, err := s.evm.ChainID()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		transactor, err := bind.NewKeyedTransactorWithChainID(s.paymasterKey, chainId)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		tx, err := afcontract.CreateAccount(transactor, owner, &req.Salt)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		// wait for tx to be mined
+		err = s.evm.WaitForTx(tx)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
-	// upgrade account
-	chainId, err := s.evm.ChainID()
+	// Get the contract's bytecode
+	bytecode, err = s.evm.CodeAt(context.Background(), accaddrv2, nil)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	transactor, err := bind.NewKeyedTransactorWithChainID(s.paymasterKey, chainId)
+	// Check if the account contract was deployed
+	if len(bytecode) == 0 {
+		http.Error(w, "account contract is missing", http.StatusInternalServerError)
+		return
+	}
+
+	slot := common.HexToHash(indexer.ImplementationStorageSlotKey)
+
+	// Read the storage slot
+	data, err := s.evm.StorageAt(accaddrv2, slot)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	parsedABI, err := abi.JSON(strings.NewReader(string(account.AccountMetaData.ABI)))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	// Convert the data to a common.Hash
+	implementation := common.BytesToHash(data)
 
-	caddr, tx, _, err := bind.DeployContract(transactor, parsedABI, []byte(account.AccountMetaData.Bin), s.evm.Backend(), common.HexToAddress(req.EntryPoint), common.HexToAddress(req.TokenEntryPoint))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	impladdr := common.HexToAddress(implementation.Hex())
 
-	// wait for tx to be mined
-	err = s.evm.WaitForTx(tx)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	ccontract, err := account.NewAccount(acc, s.evm.Backend())
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	tx, err = ccontract.Initialize(transactor, owner)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	// wait for tx to be mined
-	err = s.evm.WaitForTx(tx)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	acccontract, err := account.NewAccount(acc, s.evm.Backend())
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	tx, err = acccontract.UpgradeTo(transactor, caddr)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	// wait for tx to be mined
-	err = s.evm.WaitForTx(tx)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	err = com.Body(w, &creationResponse{AccountAddress: acc.Hex()}, nil)
+	err = com.Body(w, &upgradeResponse{AccountImplementation: impladdr.Hex()}, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}

@@ -68,7 +68,7 @@ func (s *Service) PinProfile(w http.ResponseWriter, r *http.Request) {
 
 	// Check if the profile contract is deployed
 	if len(bytecode) == 0 {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "profile contract is missing", http.StatusBadRequest)
 		return
 	}
 
@@ -168,7 +168,7 @@ func (s *Service) PinMultiPartProfile(w http.ResponseWriter, r *http.Request) {
 
 	// Check if the profile contract is deployed
 	if len(bytecode) == 0 {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "profile contract is missing", http.StatusBadRequest)
 		return
 	}
 
@@ -306,7 +306,7 @@ func (s *Service) Unpin(w http.ResponseWriter, r *http.Request) {
 
 	// Check if the profile contract is deployed
 	if len(bytecode) == 0 {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "profile contract is missing", http.StatusBadRequest)
 		return
 	}
 

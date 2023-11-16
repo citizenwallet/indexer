@@ -66,6 +66,18 @@ func (e *OPService) NonceAt(ctx context.Context, account common.Address, blockNu
 	return e.client.NonceAt(e.ctx, account, blockNumber)
 }
 
+func (e *OPService) EstimateGasPrice() (*big.Int, error) {
+	return e.client.SuggestGasPrice(e.ctx)
+}
+
+func (e *OPService) EstimateGasLimit(msg ethereum.CallMsg) (uint64, error) {
+	return e.client.EstimateGas(e.ctx, msg)
+}
+
+func (e *OPService) StorageAt(addr common.Address, slot common.Hash) ([]byte, error) {
+	return e.client.StorageAt(e.ctx, addr, slot, nil)
+}
+
 func (e *OPService) ChainID() (*big.Int, error) {
 	chid, err := e.client.ChainID(e.ctx)
 	if err != nil {

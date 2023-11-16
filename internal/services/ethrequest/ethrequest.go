@@ -71,6 +71,18 @@ func (e *EthService) NonceAt(ctx context.Context, account common.Address, blockN
 	return e.client.NonceAt(e.ctx, account, blockNumber)
 }
 
+func (e *EthService) EstimateGasPrice() (*big.Int, error) {
+	return e.client.SuggestGasPrice(e.ctx)
+}
+
+func (e *EthService) EstimateGasLimit(msg ethereum.CallMsg) (uint64, error) {
+	return e.client.EstimateGas(e.ctx, msg)
+}
+
+func (e *EthService) StorageAt(addr common.Address, slot common.Hash) ([]byte, error) {
+	return e.client.StorageAt(e.ctx, addr, slot, nil)
+}
+
 func (e *EthService) EstimateFullGas(from common.Address, tx *types.Transaction) (uint64, error) {
 
 	msg := ethereum.CallMsg{
@@ -95,17 +107,6 @@ func (e *EthService) EstimateGas(from, to string, value uint64) (uint64, error) 
 		From:  common.HexToAddress(from),
 		To:    &t,
 		Value: big.NewInt(int64(value)),
-		Gas:   0,
-	}
-
-	return e.client.EstimateGas(e.ctx, msg)
-}
-
-func (e *EthService) EstimateGasPrice(from string, value uint64, data []byte) (uint64, error) {
-	msg := ethereum.CallMsg{
-		From:  common.HexToAddress(from),
-		Value: big.NewInt(int64(value)),
-		Data:  data,
 		Gas:   0,
 	}
 

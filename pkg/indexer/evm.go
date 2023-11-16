@@ -24,6 +24,9 @@ type EVMRequester interface {
 
 	CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error)
 	NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error)
+	EstimateGasPrice() (*big.Int, error)
+	EstimateGasLimit(msg ethereum.CallMsg) (uint64, error)
+	StorageAt(addr common.Address, slot common.Hash) ([]byte, error)
 
 	ChainID() (*big.Int, error)
 	LatestBlock() (*big.Int, error)

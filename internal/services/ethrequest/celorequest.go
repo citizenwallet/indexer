@@ -68,6 +68,18 @@ func (e *CeloService) NonceAt(ctx context.Context, account common.Address, block
 	return e.client.NonceAt(e.ctx, account, blockNumber)
 }
 
+func (e *CeloService) EstimateGasPrice() (*big.Int, error) {
+	return e.client.SuggestGasPrice(e.ctx)
+}
+
+func (e *CeloService) EstimateGasLimit(msg ethereum.CallMsg) (uint64, error) {
+	return e.client.EstimateGas(e.ctx, msg)
+}
+
+func (e *CeloService) StorageAt(addr common.Address, slot common.Hash) ([]byte, error) {
+	return e.client.StorageAt(e.ctx, addr, slot, nil)
+}
+
 func (e *CeloService) ChainID() (*big.Int, error) {
 	chid, err := e.client.ChainID(e.ctx)
 	if err != nil {

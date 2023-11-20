@@ -1,9 +1,11 @@
 package accounts
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"net/http"
 
@@ -213,7 +215,50 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// check if it already exists, don't allow to create again
+	// check if the account is already upgraded
+	impladdr, err := get1967ProxyImplementation(s.evm, acc)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	implebytecode, err := s.evm.CodeAt(context.Background(), *impladdr, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Check if the account contract was deployed
+	if len(implebytecode) == 0 {
+		http.Error(w, "account implementation is missing", http.StatusInternalServerError)
+		return
+	}
+
+	afimpl, err := afcontract.AccountImplementation(nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Get the contract's bytecode
+	afbytecode, err := s.evm.CodeAt(context.Background(), afimpl, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Check if the account factory contract is deployed
+	if len(afbytecode) == 0 {
+		http.Error(w, "account factory contract implementation is missing", http.StatusBadRequest)
+		return
+	}
+
+	if bytes.Equal(implebytecode, afbytecode) {
+		http.Error(w, "account is already upgraded", http.StatusConflict)
+		return
+	}
+
+	// check if it already exists, create if needed
 	accaddrv2, err := afcontract.GetAddress(nil, owner, &req.Salt)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -221,14 +266,14 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the contract's bytecode
-	bytecode, err = s.evm.CodeAt(context.Background(), accaddrv2, nil)
+	acc2bytecode, err := s.evm.CodeAt(context.Background(), accaddrv2, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Check if the account contract is already deployed and deploy if missing
-	if len(bytecode) == 0 {
+	if len(acc2bytecode) == 0 {
 		// upgrade account
 		chainId, err := s.evm.ChainID()
 		if err != nil {
@@ -256,35 +301,41 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get the contract's bytecode
-	bytecode, err = s.evm.CodeAt(context.Background(), accaddrv2, nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Check if the account contract was deployed
-	if len(bytecode) == 0 {
-		http.Error(w, "account contract is missing", http.StatusInternalServerError)
-		return
-	}
-
-	slot := common.HexToHash(indexer.ImplementationStorageSlotKey)
-
-	// Read the storage slot
-	data, err := s.evm.StorageAt(accaddrv2, slot)
+	v2Impladdr, err := get1967ProxyImplementation(s.evm, accaddrv2)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Convert the data to a common.Hash
-	implementation := common.BytesToHash(data)
-
-	impladdr := common.HexToAddress(implementation.Hex())
-
-	err = com.Body(w, &upgradeResponse{AccountImplementation: impladdr.Hex()}, nil)
+	err = com.Body(w, &upgradeResponse{AccountImplementation: v2Impladdr.Hex()}, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
+}
+
+func get1967ProxyImplementation(evm indexer.EVMRequester, addr common.Address) (*common.Address, error) {
+	bytecode, err := evm.CodeAt(context.Background(), addr, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the account contract was deployed
+	if len(bytecode) == 0 {
+		return nil, errors.New("account contract is missing")
+	}
+
+	slot := common.HexToHash(indexer.ImplementationStorageSlotKey)
+
+	// Read the storage slot
+	data, err := evm.StorageAt(addr, slot)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert the data to a common.Hash
+	implementation := common.BytesToHash(data)
+
+	impl := common.HexToAddress(implementation.Hex())
+
+	return &impl, nil
 }

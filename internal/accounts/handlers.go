@@ -33,6 +33,31 @@ func NewService(evm indexer.EVMRequester, entryPoint string, paymasterKey *ecdsa
 	}
 }
 
+// Create handler for publishing an account
+func (s *Service) Exists(w http.ResponseWriter, r *http.Request) {
+	accaddr := chi.URLParam(r, "acc_addr")
+
+	acc := common.HexToAddress(accaddr)
+
+	// Get the contract's bytecode
+	bytecode, err := s.evm.CodeAt(context.Background(), acc, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Check if the account contract is already deployed
+	if len(bytecode) == 0 {
+		http.Error(w, "account contract does not exist", http.StatusNotFound)
+		return
+	}
+
+	err = com.Body(w, nil, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
 type creationRequest struct {
 	Owner string  `json:"owner"`
 	Salt  big.Int `json:"salt"`

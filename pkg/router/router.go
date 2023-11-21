@@ -117,6 +117,7 @@ func (r *Router) Start(port int) error {
 	})
 
 	cr.Route("/accounts", func(cr chi.Router) {
+		cr.Get("/{acc_addr}/exists", acc.Exists)
 		cr.Route("/factory/{factory_address}", func(cr chi.Router) {
 			cr.Post("/", with1271Signature(r.evm, acc.Create))
 			cr.Patch("/sca/{acc_addr}", with1271Signature(r.evm, acc.Upgrade))

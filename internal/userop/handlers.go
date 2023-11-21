@@ -13,6 +13,7 @@ import (
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -191,6 +192,48 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	entryPoint := common.HexToAddress(epAddr)
+
+	// Parse the contract ABI
+	parsedABI, err := tokenEntryPoint.TokenEntryPointMetaData.GetAbi()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Pack the function name and arguments into calldata
+	data, err := parsedABI.Pack("handleOps", []tokenEntryPoint.UserOperation{tokenEntryPoint.UserOperation(userop)}, entryPoint)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Prepare the call message
+	msg := ethereum.CallMsg{
+		From:     transactor.From, // the account executing the function
+		To:       &entryPoint,
+		Gas:      0,    // set to 0 for estimation
+		GasPrice: nil,  // set to nil for estimation
+		Value:    nil,  // set to nil for estimation
+		Data:     data, // the function call data
+	}
+
+	gasLimit, err := s.evm.EstimateGasLimit(msg)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	transactor.GasLimit = gasLimit + (gasLimit / 2) // make sure there is some margin for spikes
+
+	gasPrice, err := s.evm.EstimateGasPrice()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	transactor.GasPrice = gasPrice
 
 	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Backend())
 	if err != nil {

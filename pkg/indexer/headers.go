@@ -9,6 +9,8 @@ const (
 	SignatureHeader = "X-Signature"
 	// AddressHeader is the header that contains the address of the sender
 	AddressHeader = "X-Address"
+	// AppVersionHeader is the header that contains the app version of the sender
+	AppVersionHeader = "X-App-Version"
 )
 
 type ContextKey string

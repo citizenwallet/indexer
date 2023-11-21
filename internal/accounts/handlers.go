@@ -10,7 +10,6 @@ import (
 	"net/http"
 
 	com "github.com/citizenwallet/indexer/internal/common"
-	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/accfactory"
 
@@ -20,16 +19,14 @@ import (
 )
 
 type Service struct {
-	b   *bucket.Bucket
 	evm indexer.EVMRequester
 
 	entryPoint   common.Address
 	paymasterKey *ecdsa.PrivateKey
 }
 
-func NewService(b *bucket.Bucket, evm indexer.EVMRequester, entryPoint string, paymasterKey *ecdsa.PrivateKey) *Service {
+func NewService(evm indexer.EVMRequester, entryPoint string, paymasterKey *ecdsa.PrivateKey) *Service {
 	return &Service{
-		b:            b,
 		evm:          evm,
 		entryPoint:   common.HexToAddress(entryPoint),
 		paymasterKey: paymasterKey,

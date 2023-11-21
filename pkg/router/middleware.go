@@ -42,6 +42,7 @@ var (
 		"Authorization",
 		indexer.SignatureHeader,
 		indexer.AddressHeader,
+		indexer.AppVersionHeader,
 	}
 
 	MAGIC_VALUE = [4]byte{0x16, 0x26, 0xba, 0x7e}

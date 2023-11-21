@@ -180,7 +180,7 @@ func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// if the nonce is 0, then check that the factory exists
-	if nonce.Cmp(big.NewInt(0)) == 0 {
+	if nonce.Cmp(big.NewInt(0)) == 0 && len(userop.InitCode) > 20 {
 		factoryaddr := common.BytesToAddress(userop.InitCode[:20])
 
 		// Get the contract's bytecode

@@ -13,11 +13,10 @@ import (
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-chi/chi/v5"
 )
@@ -181,18 +180,6 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chainId, err := s.evm.ChainID()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	transactor, err := bind.NewKeyedTransactorWithChainID(s.paymasterKey, chainId)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
 	entryPoint := common.HexToAddress(epAddr)
 
 	// Parse the contract ABI
@@ -209,39 +196,38 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prepare the call message
-	msg := ethereum.CallMsg{
-		From:     transactor.From, // the account executing the function
-		To:       &entryPoint,
-		Gas:      0,    // set to 0 for estimation
-		GasPrice: nil,  // set to nil for estimation
-		Value:    nil,  // set to nil for estimation
-		Data:     data, // the function call data
-	}
+	// Get the public key from the private key
+	publicKey := s.paymasterKey.Public().(*ecdsa.PublicKey)
 
-	gasLimit, err := s.evm.EstimateGasLimit(msg)
+	// Convert the public key to an Ethereum address
+	sponsor := crypto.PubkeyToAddress(*publicKey)
+
+	nonce, err := s.evm.NonceAt(context.Background(), sponsor, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	transactor.GasLimit = gasLimit + (gasLimit / 2) // make sure there is some margin for spikes
-
-	gasPrice, err := s.evm.EstimateGasPrice()
+	tx, err := s.evm.NewTx(nonce, sponsor, entryPoint, data)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	transactor.GasPrice = gasPrice
-
-	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Backend())
+	chainId, err := s.evm.ChainID()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	tx, err := ep.HandleOps(transactor, []tokenEntryPoint.UserOperation{tokenEntryPoint.UserOperation(userop)}, common.HexToAddress(epAddr))
+	// Sign the transaction
+	signedTx, err := types.SignTx(tx, types.NewLondonSigner(chainId), s.paymasterKey)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = s.evm.SendTransaction(signedTx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

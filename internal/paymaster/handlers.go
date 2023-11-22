@@ -251,7 +251,7 @@ func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 
 	// validity period
 	now := time.Now().Unix()
-	validUntil := big.NewInt(now + 30)
+	validUntil := big.NewInt(now + 60)
 	validAfter := big.NewInt(now - 10)
 
 	// Ensure the values fit within 48 bits

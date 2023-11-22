@@ -66,12 +66,87 @@ func (e *OPService) NonceAt(ctx context.Context, account common.Address, blockNu
 	return e.client.NonceAt(e.ctx, account, blockNumber)
 }
 
+func (e *OPService) BaseFee() (*big.Int, error) {
+	// Get the latest block header
+	header, err := e.client.HeaderByNumber(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return header.BaseFee, nil
+}
+
 func (e *OPService) EstimateGasPrice() (*big.Int, error) {
 	return e.client.SuggestGasPrice(e.ctx)
 }
 
 func (e *OPService) EstimateGasLimit(msg ethereum.CallMsg) (uint64, error) {
 	return e.client.EstimateGas(e.ctx, msg)
+}
+
+func (e *OPService) NewTx(nonce uint64, from, to common.Address, data []byte) (*types.Transaction, error) {
+	baseFee, err := e.BaseFee()
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the priority fee per gas (miner tip)
+	tip, err := e.MaxPriorityFeePerGas()
+	if err != nil {
+		return nil, err
+	}
+
+	buffer := new(big.Int).Div(tip, big.NewInt(100))
+
+	maxPriorityFeePerGas := new(big.Int).Add(tip, buffer)
+
+	maxFeePerGas := new(big.Int).Add(maxPriorityFeePerGas, new(big.Int).Mul(baseFee, big.NewInt(2)))
+
+	// Prepare the call messageß
+	msg := ethereum.CallMsg{
+		From:     from, // the account executing the function
+		To:       &to,
+		Gas:      0,    // set to 0 for estimation
+		GasPrice: nil,  // set to nil for estimation
+		Value:    nil,  // set to nil for estimation
+		Data:     data, // the function call data
+	}
+
+	gasLimit, err := e.EstimateGasLimit(msg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new dynamic fee transaction
+	tx := types.NewTx(&types.DynamicFeeTx{
+		Nonce:     nonce,
+		GasFeeCap: maxFeePerGas,
+		GasTipCap: maxPriorityFeePerGas,
+		Gas:       gasLimit + (gasLimit / 2), // make sure there is some margin for spikes
+		To:        &to,
+		Value:     common.Big0,
+		Data:      data,
+	})
+	return tx, nil
+}
+
+func (e *OPService) SendTransaction(tx *types.Transaction) error {
+	return e.client.SendTransaction(e.ctx, tx)
+}
+
+func (e *OPService) MaxPriorityFeePerGas() (*big.Int, error) {
+	var hexFee string
+	err := e.rpc.Call(&hexFee, "eth_maxPriorityFeePerGas")
+	if err != nil {
+		return common.Big0, err
+	}
+
+	fee := new(big.Int)
+	_, ok := fee.SetString(hexFee[2:], 16) // remove the "0x" prefix and parse as base 16
+	if !ok {
+		return nil, errors.New("invalid hex string")
+	}
+
+	return fee, nil
 }
 
 func (e *OPService) StorageAt(addr common.Address, slot common.Hash) ([]byte, error) {

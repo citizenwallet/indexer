@@ -101,7 +101,7 @@ func (e *OPService) NewTx(nonce uint64, from, to common.Address, data []byte) (*
 
 	maxFeePerGas := new(big.Int).Add(maxPriorityFeePerGas, new(big.Int).Mul(baseFee, big.NewInt(2)))
 
-	// Prepare the call messageß
+	// Prepare the call message
 	msg := ethereum.CallMsg{
 		From:     from, // the account executing the function
 		To:       &to,

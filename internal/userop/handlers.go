@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	comm "github.com/citizenwallet/indexer/internal/common"
+	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
@@ -18,20 +20,20 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/go-chi/chi/v5"
 )
 
 type Service struct {
 	evm indexer.EVMRequester
-
-	paymasterKey *ecdsa.PrivateKey
+	db  *db.DB
 }
 
 // NewService
-func NewService(evm indexer.EVMRequester, pk *ecdsa.PrivateKey) *Service {
+func NewService(evm indexer.EVMRequester, db *db.DB) *Service {
 	return &Service{
 		evm,
-		pk,
+		db,
 	}
 }
 
@@ -171,7 +173,21 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	publicKeyBytes := crypto.FromECDSAPub(&s.paymasterKey.PublicKey)
+	// fetch the sponsor's corresponding private key from the db
+	sponsorKey, err := s.db.SponsorDB.GetSponsor(addr.Hex())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Generate ecdsa.PrivateKey from bytes
+	privateKey, err := comm.HexToPrivateKey(sponsorKey.PrivateKey)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	publicKeyBytes := crypto.FromECDSAPub(&privateKey.PublicKey)
 
 	// check if the public key matches the recovered public key
 	matches := bytes.Equal(sigPublicKey, publicKeyBytes)
@@ -179,6 +195,12 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	// Get the public key from the private key
+	publicKey := privateKey.Public().(*ecdsa.PublicKey)
+
+	// Convert the public key to an Ethereum address
+	sponsor := crypto.PubkeyToAddress(*publicKey)
 
 	entryPoint := common.HexToAddress(epAddr)
 
@@ -195,12 +217,6 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	// Get the public key from the private key
-	publicKey := s.paymasterKey.Public().(*ecdsa.PublicKey)
-
-	// Convert the public key to an Ethereum address
-	sponsor := crypto.PubkeyToAddress(*publicKey)
 
 	nonce, err := s.evm.NonceAt(context.Background(), sponsor, nil)
 	if err != nil {
@@ -221,7 +237,7 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Sign the transaction
-	signedTx, err := types.SignTx(tx, types.NewLondonSigner(chainId), s.paymasterKey)
+	signedTx, err := types.SignTx(tx, types.NewLondonSigner(chainId), privateKey)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -229,7 +245,19 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 
 	err = s.evm.SendTransaction(signedTx)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		e, ok := err.(rpc.Error)
+		if ok && e.ErrorCode() != -32000 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		if !strings.Contains(e.Error(), "insufficient funds") {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		// insufficient funds
+		w.WriteHeader(http.StatusPreconditionFailed)
 		return
 	}
 

@@ -77,10 +77,10 @@ func (r *Router) Start(port int) error {
 	pr := profiles.NewService(r.b, r.evm, comm)
 	legpr := profiles.NewLegacyService(r.b, comm)
 	pu := push.NewService(r.db, comm)
-	acc := accounts.NewService(r.evm, r.epAddr, r.paymasterKey)
+	acc := accounts.NewService(r.evm, r.epAddr, r.db)
 
-	pm := paymaster.NewService(r.evm, r.paymasterKey)
-	uop := userop.NewService(r.evm, r.paymasterKey)
+	pm := paymaster.NewService(r.evm, r.db)
+	uop := userop.NewService(r.evm, r.db)
 
 	// configure routes
 	cr.Route("/logs/transfers", func(cr chi.Router) {

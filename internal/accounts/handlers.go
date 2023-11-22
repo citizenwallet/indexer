@@ -3,33 +3,40 @@ package accounts
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
 	"math/big"
 	"net/http"
+	"strings"
 
 	com "github.com/citizenwallet/indexer/internal/common"
+	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/accfactory"
+	"github.com/citizenwallet/smartcontracts/pkg/contracts/account"
+	"github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
+	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/go-chi/chi/v5"
 )
 
 type Service struct {
 	evm indexer.EVMRequester
 
-	entryPoint   common.Address
-	paymasterKey *ecdsa.PrivateKey
+	entryPoint common.Address
+	db         *db.DB
+	// paymasterKey *ecdsa.PrivateKey
 }
 
-func NewService(evm indexer.EVMRequester, entryPoint string, paymasterKey *ecdsa.PrivateKey) *Service {
+func NewService(evm indexer.EVMRequester, entryPoint string, db *db.DB) *Service {
 	return &Service{
-		evm:          evm,
-		entryPoint:   common.HexToAddress(entryPoint),
-		paymasterKey: paymasterKey,
+		evm:        evm,
+		entryPoint: common.HexToAddress(entryPoint),
+		db:         db,
+		// paymasterKey: paymasterKey,
 	}
 }
 
@@ -146,7 +153,52 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	transactor, err := bind.NewKeyedTransactorWithChainID(s.paymasterKey, chainId)
+	// fetch the sponsor address from the paymaster contract
+	accimpl, err := afcontract.AccountImplementation(nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	accContract, err := account.NewAccount(accimpl, s.evm.Backend())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	tep, err := accContract.TokenEntryPoint(nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	tepContract, err := tokenEntryPoint.NewTokenEntryPoint(tep, s.evm.Backend())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	paddr, err := tepContract.Paymaster(nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// fetch corresponding private key from the db
+	sponsorKey, err := s.db.SponsorDB.GetSponsor(paddr.Hex())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Generate ecdsa.PrivateKey from bytes
+	privateKey, err := com.HexToPrivateKey(sponsorKey.PrivateKey)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	transactor, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -154,7 +206,19 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := afcontract.CreateAccount(transactor, owner, common.Big0)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		e, ok := err.(rpc.Error)
+		if ok && e.ErrorCode() != -32000 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		if !strings.Contains(e.Error(), "insufficient funds") {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		// insufficient funds
+		w.WriteHeader(http.StatusPreconditionFailed)
 		return
 	}
 
@@ -303,7 +367,64 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		transactor, err := bind.NewKeyedTransactorWithChainID(s.paymasterKey, chainId)
+		// fetch the sponsor address from the paymaster contract
+		accimpl, err := afcontract.AccountImplementation(nil)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		accContract, err := account.NewAccount(accimpl, s.evm.Backend())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		tep, err := accContract.TokenEntryPoint(nil)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		tepContract, err := tokenEntryPoint.NewTokenEntryPoint(tep, s.evm.Backend())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		paddr, err := tepContract.Paymaster(nil)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		pm, err := paymaster.NewPaymaster(paddr, s.evm.Backend())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		sponsor, err := pm.Sponsor(nil)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		// fetch corresponding private key from the db
+		sponsorKey, err := s.db.SponsorDB.GetSponsor(sponsor.Hex())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		// Generate ecdsa.PrivateKey from bytes
+		privateKey, err := com.HexToPrivateKey(sponsorKey.PrivateKey)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		transactor, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return

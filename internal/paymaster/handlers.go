@@ -3,7 +3,6 @@ package paymaster
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	comm "github.com/citizenwallet/indexer/internal/common"
+	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
@@ -31,14 +31,14 @@ var (
 type Service struct {
 	evm indexer.EVMRequester
 
-	paymasterKey *ecdsa.PrivateKey
+	db *db.DB
 }
 
 // NewService
-func NewService(evm indexer.EVMRequester, pk *ecdsa.PrivateKey) *Service {
+func NewService(evm indexer.EVMRequester, db *db.DB) *Service {
 	return &Service{
 		evm,
-		pk,
+		db,
 	}
 }
 
@@ -287,7 +287,21 @@ func (s *Service) Sponsor(w http.ResponseWriter, r *http.Request) {
 	// Convert the hash to an Ethereum signed message hash
 	hhash := accounts.TextHash(hash[:])
 
-	sig, err := crypto.Sign(hhash, s.paymasterKey)
+	// fetch the sponsor's corresponding private key from the db
+	sponsorKey, err := s.db.SponsorDB.GetSponsor(addr.Hex())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Generate ecdsa.PrivateKey from bytes
+	privateKey, err := comm.HexToPrivateKey(sponsorKey.PrivateKey)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	sig, err := crypto.Sign(hhash, privateKey)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

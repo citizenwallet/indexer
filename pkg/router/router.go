@@ -75,15 +75,18 @@ func (r *Router) Start(port int) error {
 	l := logs.NewService(r.chainId, r.db, r.evm)
 	ev := events.NewService(r.db)
 	pr := profiles.NewService(r.b, r.evm, comm)
-	legpr := profiles.NewLegacyService(r.b, comm)
 	pu := push.NewService(r.db, comm)
 	acc := accounts.NewService(r.evm, r.epAddr, r.db)
 
 	pm := paymaster.NewService(r.evm, r.db)
 	uop := userop.NewService(r.evm, r.db)
 
+	// instantiate legacy handlers
+	legl := logs.NewLegacyService(r.chainId, r.db, comm)
+	legpr := profiles.NewLegacyService(r.b, comm)
+
 	// configure routes
-	cr.Route("/logs/transfers", func(cr chi.Router) {
+	cr.Route("/logs/v2/transfers", func(cr chi.Router) {
 		cr.Route("/{token_address}", func(cr chi.Router) {
 			cr.Get("/{acc_addr}", l.Get)
 			cr.Get("/{acc_addr}/new", l.GetNew)
@@ -98,13 +101,8 @@ func (r *Router) Start(port int) error {
 		cr.Post("/", ev.AddEvent) // TODO: add auth
 	})
 
-	cr.Route("/profiles", func(cr chi.Router) {
-		// legacy support: added 14/11/2023
-		cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, legpr.PinMultiPartProfile))
-		cr.Patch("/{acc_addr}", withSignature(r.evm, legpr.PinProfile))
-		cr.Delete("/{acc_addr}", withSignature(r.evm, legpr.Unpin))
-
-		cr.Route("/v2/{contract_address}", func(cr chi.Router) {
+	cr.Route("/profiles/v2", func(cr chi.Router) {
+		cr.Route("/{contract_address}", func(cr chi.Router) {
 			cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, pr.PinMultiPartProfile))
 			cr.Patch("/{acc_addr}", withSignature(r.evm, pr.PinProfile))
 			cr.Delete("/{acc_addr}", withSignature(r.evm, pr.Unpin))
@@ -129,6 +127,26 @@ func (r *Router) Start(port int) error {
 			"pm_sponsorUserOperation": pm.Sponsor,
 			"eth_sendUserOperation":   uop.Send,
 		}))
+	})
+
+	// configure legacy routes
+	cr.Route("/logs/transfers", func(cr chi.Router) {
+		// legacy support: for versions < 1.0.37
+		cr.Route("/{contract_address}", func(cr chi.Router) {
+			cr.Get("/{addr}", legl.Get)
+			cr.Get("/{addr}/new", legl.GetNew)
+
+			cr.Post("/{addr}", withSignature(r.evm, legl.AddSending))
+
+			cr.Patch("/{addr}/{hash}", withSignature(r.evm, legl.SetStatus))
+		})
+	})
+
+	cr.Route("/profiles", func(cr chi.Router) {
+		// legacy support: for versions < 1.0.37
+		cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, legpr.PinMultiPartProfile))
+		cr.Patch("/{acc_addr}", withSignature(r.evm, legpr.PinProfile))
+		cr.Delete("/{acc_addr}", withSignature(r.evm, legpr.Unpin))
 	})
 
 	// start the server

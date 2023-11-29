@@ -48,6 +48,10 @@ func (e *CeloService) BlockTime(number *big.Int) (uint64, error) {
 		return 0, err
 	}
 
+	if blk == nil {
+		return 0, errors.New("block not found")
+	}
+
 	v, err := hexutil.DecodeUint64(blk.Timestamp)
 	if err != nil {
 		return 0, err

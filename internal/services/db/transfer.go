@@ -127,17 +127,7 @@ func (db *TransferDB) AddTransfer(tx *indexer.Transfer) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
 	INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	ON CONFLICT(hash) DO UPDATE SET
-		tx_hash = excluded.tx_hash,
-		token_id = excluded.token_id,
-		created_at = excluded.created_at,
-		from_to_addr = excluded.from_to_addr,
-		from_addr = excluded.from_addr,
-		to_addr = excluded.to_addr,
-		nonce = excluded.nonce,
-		value = excluded.value,
-		data = excluded.data,
-		status = excluded.status
+	ON CONFLICT(hash) DO NOTHING
 	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data, tx.Status)
 
 	return err

@@ -14,7 +14,6 @@ import (
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/accfactory"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/account"
-	"github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -398,20 +397,8 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		pm, err := paymaster.NewPaymaster(paddr, s.evm.Backend())
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		sponsor, err := pm.Sponsor(nil)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
 		// fetch corresponding private key from the db
-		sponsorKey, err := s.db.SponsorDB.GetSponsor(sponsor.Hex())
+		sponsorKey, err := s.db.SponsorDB.GetSponsor(paddr.Hex())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return

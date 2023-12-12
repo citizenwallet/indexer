@@ -3,6 +3,7 @@ package ethrequest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum"
@@ -43,7 +44,7 @@ func (e *CeloService) Close() {
 func (e *CeloService) BlockTime(number *big.Int) (uint64, error) {
 	// Celo Blocks has a slightly different format than Ethereum Blocks, so we need to use a custom Block struct
 	var blk *EthBlock
-	err := e.rpc.Call(&blk, "eth_getBlockByNumber", "0x"+common.Bytes2Hex(number.Bytes()), true)
+	err := e.rpc.Call(&blk, "eth_getBlockByNumber", fmt.Sprintf("0x%s", number.Text(16)), true)
 	if err != nil {
 		return 0, err
 	}

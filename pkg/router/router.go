@@ -76,7 +76,7 @@ func (r *Router) Start(port int) error {
 	ev := events.NewService(r.db)
 	pr := profiles.NewService(r.b, r.evm, comm)
 	pu := push.NewService(r.db, comm)
-	acc := accounts.NewService(r.evm, r.epAddr, r.db)
+	acc := accounts.NewService(r.evm, r.accFactAddr, r.db, r.paymasterKey)
 
 	pm := paymaster.NewService(r.evm, r.db)
 	uop := userop.NewService(r.evm, r.db)

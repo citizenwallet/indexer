@@ -25,7 +25,7 @@ type DB struct {
 }
 
 // NewDB instantiates a new DB
-func NewDB(chainID *big.Int, username, password, name, host, rhost string) (*DB, error) {
+func NewDB(chainID *big.Int, username, password, name, host, rhost, secret string) (*DB, error) {
 	connStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, host)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -55,7 +55,7 @@ func NewDB(chainID *big.Int, username, password, name, host, rhost string) (*DB,
 		return nil, err
 	}
 
-	sponsorDB, err := NewSponsorDB(db, rdb, evname)
+	sponsorDB, err := NewSponsorDB(db, rdb, evname, secret)
 	if err != nil {
 		return nil, err
 	}

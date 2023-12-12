@@ -3,6 +3,7 @@ package accounts
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
 	"math/big"
@@ -25,17 +26,17 @@ import (
 type Service struct {
 	evm indexer.EVMRequester
 
-	entryPoint common.Address
-	db         *db.DB
-	// paymasterKey *ecdsa.PrivateKey
+	accountFactory common.Address
+	db             *db.DB
+	paymasterKey   *ecdsa.PrivateKey
 }
 
-func NewService(evm indexer.EVMRequester, entryPoint string, db *db.DB) *Service {
+func NewService(evm indexer.EVMRequester, accountFactory string, db *db.DB, paymasterKey *ecdsa.PrivateKey) *Service {
 	return &Service{
-		evm:        evm,
-		entryPoint: common.HexToAddress(entryPoint),
-		db:         db,
-		// paymasterKey: paymasterKey,
+		evm:            evm,
+		accountFactory: common.HexToAddress(accountFactory),
+		db:             db,
+		paymasterKey:   paymasterKey,
 	}
 }
 
@@ -165,36 +166,45 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var privateKey *ecdsa.PrivateKey
+
 	tep, err := accContract.TokenEntryPoint(nil)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+		e, ok := err.(rpc.Error)
+		if ok && e.ErrorCode() != -32000 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
-	tepContract, err := tokenEntryPoint.NewTokenEntryPoint(tep, s.evm.Backend())
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+		// legacy account with a token entrypoint
+		privateKey = s.paymasterKey
 
-	paddr, err := tepContract.Paymaster(nil)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	} else {
+		tepContract, err := tokenEntryPoint.NewTokenEntryPoint(tep, s.evm.Backend())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
-	// fetch corresponding private key from the db
-	sponsorKey, err := s.db.SponsorDB.GetSponsor(paddr.Hex())
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+		paddr, err := tepContract.Paymaster(nil)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
-	// Generate ecdsa.PrivateKey from bytes
-	privateKey, err := com.HexToPrivateKey(sponsorKey.PrivateKey)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		// fetch corresponding private key from the db
+		sponsorKey, err := s.db.SponsorDB.GetSponsor(paddr.Hex())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		// Generate ecdsa.PrivateKey from bytes
+		privateKey, err = com.HexToPrivateKey(sponsorKey.PrivateKey)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
 	transactor, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
@@ -235,9 +245,8 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 type upgradeRequest struct {
-	Owner           string  `json:"owner"`
-	Salt            big.Int `json:"salt"`
-	TokenEntryPoint string  `json:"token_entry_point"`
+	Owner string  `json:"owner"`
+	Salt  big.Int `json:"salt"`
 }
 
 type upgradeResponse struct {
@@ -366,14 +375,7 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// fetch the sponsor address from the paymaster contract
-		accimpl, err := afcontract.AccountImplementation(nil)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		accContract, err := account.NewAccount(accimpl, s.evm.Backend())
+		accContract, err := account.NewAccount(afimpl, s.evm.Backend())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return

@@ -128,7 +128,7 @@ func main() {
 
 	log.Default().Println("starting internal db service...")
 
-	d, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost)
+	d, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost, conf.DBSecret)
 	if err != nil {
 		log.Fatal(err)
 	}

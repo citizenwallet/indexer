@@ -124,8 +124,9 @@ func (r *Router) Start(port int) error {
 
 	cr.Route("/rpc/{pm_address}", func(cr chi.Router) {
 		cr.Post("/", withJSONRPCRequest(map[string]http.HandlerFunc{
-			"pm_sponsorUserOperation": pm.Sponsor,
-			"eth_sendUserOperation":   uop.Send,
+			"pm_sponsorUserOperation":   pm.Sponsor,
+			"pm_ooSponsorUserOperation": pm.OOSponsor,
+			"eth_sendUserOperation":     uop.Send,
 		}))
 	})
 

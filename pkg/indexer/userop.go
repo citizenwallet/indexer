@@ -86,3 +86,21 @@ func (op *UserOp) UnmarshalJSON(input []byte) error {
 
 	return nil
 }
+
+func (u *UserOp) Copy() UserOp {
+	copy := UserOp{
+		Sender:               u.Sender,
+		Nonce:                new(big.Int).Set(u.Nonce),
+		InitCode:             append([]byte(nil), u.InitCode...),
+		CallData:             append([]byte(nil), u.CallData...),
+		CallGasLimit:         new(big.Int).Set(u.CallGasLimit),
+		VerificationGasLimit: new(big.Int).Set(u.VerificationGasLimit),
+		PreVerificationGas:   new(big.Int).Set(u.PreVerificationGas),
+		MaxFeePerGas:         new(big.Int).Set(u.MaxFeePerGas),
+		MaxPriorityFeePerGas: new(big.Int).Set(u.MaxPriorityFeePerGas),
+		PaymasterAndData:     append([]byte(nil), u.PaymasterAndData...),
+		Signature:            append([]byte(nil), u.Signature...),
+	}
+
+	return copy
+}

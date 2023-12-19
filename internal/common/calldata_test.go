@@ -1,0 +1,67 @@
+package common
+
+import (
+	"math/big"
+	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
+)
+
+var testCases = []string{
+	"0x",
+	"0xb61d27f60000000000000000000000005815e61ef72c9e6107b5c5a05fd121f334f7a7f1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000044a9059cbb00000000000000000000000029d755c17df3ed2ecae6e42d694fb4f7e2ff6010000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000",
+	"0xb61d27f6000000000000000000000000eec0f3257369c6bcd2fd8755cbef8a95b12bc4c90000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000c49d91dd7d000000000000000000000000d5e60a846ab25f73a5b405dfca83de1ba98fe99720202020202020202020202020202020202020202020202020207861766965720000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000002e516d50316d786637354250794a76367434657833666248626153784874716d4470444b454d55514b44504d48707600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+}
+
+type caseResult struct {
+	Dest   common.Address
+	To     common.Address
+	Amount *big.Int
+	Err    error
+}
+
+var expected = []caseResult{
+	{
+		Dest:   common.HexToAddress("0x"),
+		To:     common.HexToAddress("0x"),
+		Amount: big.NewInt(0),
+		Err:    ErrInvalidCalldata,
+	},
+	{
+		Dest:   common.HexToAddress("0x5815E61eF72c9E6107b5c5A05FD121F334f7a7f1"),
+		To:     common.HexToAddress("0x29d755C17df3ED2eCAE6e42d694fb4F7E2ff6010"),
+		Amount: big.NewInt(1),
+	},
+	{
+		Dest:   common.HexToAddress("0x"),
+		To:     common.HexToAddress("0x"),
+		Amount: big.NewInt(0),
+		Err:    ErrNotTransfer,
+	},
+}
+
+func TestParseERC20Transfer(t *testing.T) {
+	for i, tc := range testCases {
+		data := common.FromHex(tc)
+
+		dest, to, amount, err := ParseERC20Transfer(data)
+		if err != nil {
+			if err != expected[i].Err {
+				t.Errorf("err = %s, want %s", err, expected[i].Err)
+			}
+			continue
+		}
+
+		if dest != expected[i].Dest {
+			t.Errorf("dest = %s, want %s", dest, expected[i].Dest)
+		}
+
+		if to != expected[i].To {
+			t.Errorf("to = %s, want %s", to, expected[i].To)
+		}
+
+		if amount.Cmp(expected[i].Amount) != 0 {
+			t.Errorf("amount = %s, want %s", amount, expected[i].Amount)
+		}
+	}
+}

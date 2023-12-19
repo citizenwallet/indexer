@@ -25,15 +25,17 @@ import (
 )
 
 type Service struct {
-	evm indexer.EVMRequester
-	db  *db.DB
+	evm     indexer.EVMRequester
+	db      *db.DB
+	chainId *big.Int
 }
 
 // NewService
-func NewService(evm indexer.EVMRequester, db *db.DB) *Service {
+func NewService(evm indexer.EVMRequester, db *db.DB, chid *big.Int) *Service {
 	return &Service{
 		evm,
 		db,
+		chid,
 	}
 }
 
@@ -243,22 +245,69 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// detect if this userop is a transfer using the calldata
+	// Parse the contract ABI
+	var tdb *db.TransferDB
+	var log *indexer.Transfer
+
+	dest, toaddr, amount, parseErr := comm.ParseERC20Transfer(userop.CallData)
+	if parseErr == nil {
+		// this is an erc20 transfer
+		log = &indexer.Transfer{
+			TokenID:   0,
+			CreatedAt: time.Now(),
+			From:      userop.Sender.Hex(),
+			To:        toaddr.Hex(), //
+			Nonce:     userop.Nonce.Int64(),
+			Value:     amount,
+			Status:    indexer.TransferStatusSending,
+		}
+
+		log.FromTo = log.CombineFromTo()
+
+		log.GenerateHash(s.chainId.Int64())
+
+		tdb, ok = s.db.TransferDB[s.db.TransferName(dest.Hex())]
+		if ok {
+			tdb.AddTransfer(log)
+		}
+	}
+
 	err = s.evm.SendTransaction(signedTx)
 	if err != nil {
 		e, ok := err.(rpc.Error)
 		if ok && e.ErrorCode() != -32000 {
+			if parseErr == nil && tdb != nil && log != nil {
+				tdb.RemoveSendingTransfer(log.Hash)
+			}
+
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		if !strings.Contains(e.Error(), "insufficient funds") {
+			if parseErr == nil && tdb != nil && log != nil {
+				tdb.RemoveSendingTransfer(log.Hash)
+			}
+
 			w.WriteHeader(http.StatusInternalServerError)
 			return
+		}
+
+		if parseErr == nil && tdb != nil && log != nil {
+			tdb.RemoveSendingTransfer(log.Hash)
 		}
 
 		// insufficient funds
 		w.WriteHeader(http.StatusPreconditionFailed)
 		return
+	}
+
+	if parseErr == nil && tdb != nil && log != nil {
+		err = tdb.SetStatus(string(indexer.TransferStatusSending), signedTx.Hash().Hex())
+		if err != nil {
+			tdb.RemoveSendingTransfer(log.Hash)
+		}
 	}
 
 	comm.JSONRPCBody(w, tx.Hash().Hex(), nil)

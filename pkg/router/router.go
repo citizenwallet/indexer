@@ -79,7 +79,7 @@ func (r *Router) Start(port int) error {
 	acc := accounts.NewService(r.evm, r.accFactAddr, r.db, r.paymasterKey)
 
 	pm := paymaster.NewService(r.evm, r.db)
-	uop := userop.NewService(r.evm, r.db)
+	uop := userop.NewService(r.evm, r.db, r.chainId)
 
 	// instantiate legacy handlers
 	legl := logs.NewLegacyService(r.chainId, r.db, comm)

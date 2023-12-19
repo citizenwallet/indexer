@@ -1,11 +1,14 @@
 package indexer
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -17,6 +20,8 @@ const (
 	TransferStatusPending TransferStatus = "pending"
 	TransferStatusSuccess TransferStatus = "success"
 	TransferStatusFail    TransferStatus = "fail"
+
+	TEMP_HASH_PREFIX = "TEMP_HASH"
 )
 
 func TransferStatusFromString(s string) (TransferStatus, error) {
@@ -53,9 +58,19 @@ func (t *Transfer) CombineFromTo() string {
 }
 
 // generate hash for transfer using chainID, tokenID, nonce, from, to, value
-func (t *Transfer) GenerateHash(chainID int64) {
-	hash := crypto.Keccak256Hash([]byte(fmt.Sprintf("%d_%d_%s_%s_%s_%d_%d", chainID, t.TokenID, t.CreatedAt, t.From, t.To, t.Nonce, t.Value)))
-	t.Hash = hash.Hex()
+func (t *Transfer) GenerateTempHash(chainID int64) {
+	buf := new(bytes.Buffer)
+
+	// Write each value to the buffer as bytes
+	binary.Write(buf, binary.BigEndian, chainID)
+	binary.Write(buf, binary.BigEndian, t.TokenID)
+	binary.Write(buf, binary.BigEndian, t.Nonce)
+	buf.Write(common.Hex2Bytes(t.From))
+	buf.Write(common.Hex2Bytes(t.To))
+	buf.Write(t.Value.Bytes())
+
+	hash := crypto.Keccak256Hash(buf.Bytes())
+	t.Hash = fmt.Sprintf("%s_%s", TEMP_HASH_PREFIX, hash.Hex())
 }
 
 func (t *Transfer) ToRounded(decimals int64) float64 {

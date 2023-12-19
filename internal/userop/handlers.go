@@ -265,7 +265,7 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 
 		log.FromTo = log.CombineFromTo()
 
-		log.GenerateHash(s.chainId.Int64())
+		log.GenerateTempHash(s.chainId.Int64())
 
 		tdb, ok = s.db.TransferDB[s.db.TransferName(dest.Hex())]
 		if ok {
@@ -304,11 +304,19 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if parseErr == nil && tdb != nil && log != nil {
+		err = tdb.SetFinalHash(signedTx.Hash().Hex(), log.Hash)
+		if err != nil {
+			tdb.RemoveSendingTransfer(log.Hash)
+
+			comm.JSONRPCBody(w, signedTx.Hash().Hex(), nil)
+			return
+		}
+
 		err = tdb.SetStatus(string(indexer.TransferStatusSending), signedTx.Hash().Hex())
 		if err != nil {
 			tdb.RemoveSendingTransfer(log.Hash)
 		}
 	}
 
-	comm.JSONRPCBody(w, tx.Hash().Hex(), nil)
+	comm.JSONRPCBody(w, signedTx.Hash().Hex(), nil)
 }

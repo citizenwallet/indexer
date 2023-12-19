@@ -246,6 +246,15 @@ func (db *TransferDB) SetTxHash(txHash, hash string) error {
 	return err
 }
 
+// SetFinalHash sets the hash of a transfer with no tx_hash
+func (db *TransferDB) SetFinalHash(txHash, hash string) error {
+	_, err := db.db.Exec(fmt.Sprintf(`
+	UPDATE t_transfers_%s SET hash = $1, tx_hash = $1 WHERE hash = $2 AND tx_hash = ''
+	`, db.suffix), txHash, hash)
+
+	return err
+}
+
 // SetTxHash sets the tx hash of a transfer with no tx_hash
 func (db *TransferDB) ReconcileTx(txHash, hash string, nonce int64) error {
 	_, err := db.db.Exec(fmt.Sprintf(`

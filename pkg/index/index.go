@@ -288,9 +288,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 							continue
 						}
 
-						// generate a hash
-						tx.GenerateHash(i.chainID.Int64())
-
 						newTxs = append(newTxs, tx)
 						continue
 					}
@@ -520,9 +517,6 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 							continue
 						}
 
-						// generate a hash
-						tx.GenerateHash(i.chainID.Int64())
-
 						newTxs = append(newTxs, tx)
 						continue
 					}
@@ -561,6 +555,7 @@ func getERC20Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexe
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
 	return &indexer.Transfer{
+		Hash:      log.TxHash.Hex(),
 		TxHash:    log.TxHash.Hex(),
 		TokenID:   0,
 		CreatedAt: blktime,
@@ -584,6 +579,7 @@ func getERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*index
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
 	return &indexer.Transfer{
+		Hash:      log.TxHash.Hex(),
 		TxHash:    log.TxHash.Hex(),
 		TokenID:   trsf.TokenId.Int64(),
 		CreatedAt: blktime,
@@ -613,6 +609,7 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 		trsf.To = common.HexToAddress(log.Topics[3].Hex())
 
 		txs = append(txs, &indexer.Transfer{
+			Hash:      log.TxHash.Hex(),
 			TxHash:    log.TxHash.Hex(),
 			TokenID:   trsf.Id.Int64(),
 			CreatedAt: blktime,
@@ -639,6 +636,7 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 
 		for i, id := range trsf.Ids {
 			txs = append(txs, &indexer.Transfer{
+				Hash:      log.TxHash.Hex(),
 				TxHash:    log.TxHash.Hex(),
 				TokenID:   id.Int64(),
 				CreatedAt: blktime,

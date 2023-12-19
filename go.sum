@@ -56,6 +56,8 @@ github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5P
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
 github.com/citizenwallet/smartcontracts v0.0.59 h1:+ZtjQDnCMnhrrJ1Pw6z9/yAxPMhWdZs5gIQNVlDD0Q8=
 github.com/citizenwallet/smartcontracts v0.0.59/go.mod h1:kygwLWzbd6YHNkXCQJ55L1+7q+Am0XH25VqyVXDBf3c=
+github.com/citizenwallet/smartcontracts v0.0.62-0.20231212225647-fcff23b8b909 h1:81nstkUQ+/Y3BFZ9Sh2ZWPcJK333tr2QR0+BHVLZ+CM=
+github.com/citizenwallet/smartcontracts v0.0.62-0.20231212225647-fcff23b8b909/go.mod h1:kygwLWzbd6YHNkXCQJ55L1+7q+Am0XH25VqyVXDBf3c=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/cncf/udpa/go v0.0.0-20201120205902-5459f2c99403/go.mod h1:WmhPx2Nbnhtbo57+VJT5O0JRkEi1Wbu0z5j0R8u5Hbk=

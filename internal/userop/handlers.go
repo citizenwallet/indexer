@@ -226,6 +226,8 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO: needs a queue system to avoid nonce collisions when submitting multiple transactions
+
 	tx, err := s.evm.NewTx(nonce, sponsor, entryPoint, data)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

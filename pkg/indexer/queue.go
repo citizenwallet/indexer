@@ -29,7 +29,7 @@ func newMessage(message any) *Message {
 }
 
 func NewTxMessage(from, to common.Address, data []byte) *Message {
-	tx := &TxMessage{
+	tx := TxMessage{
 		From: from,
 		To:   to,
 		Data: data,

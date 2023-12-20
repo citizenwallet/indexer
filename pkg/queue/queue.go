@@ -23,13 +23,13 @@ type Processor interface {
 }
 
 // NewService function initializes a new Service with provided maximum retries, context and webhook messager.
-func NewService(maxRetries int, ctx context.Context, wm indexer.WebhookMessager) *Service {
+func NewService(maxRetries, bufferSize int, ctx context.Context, wm indexer.WebhookMessager) *Service {
 	return &Service{
-		queue:      make(chan indexer.Message), // Initialize the queue channel
-		quit:       make(chan bool),            // Initialize the quit channel
-		maxRetries: maxRetries,                 // Set the maximum retries
-		ctx:        ctx,                        // Set the context
-		wm:         wm,                         // Set the webhook messager
+		queue:      make(chan indexer.Message, bufferSize), // Initialize the buffered queue channel
+		quit:       make(chan bool),                        // Initialize the quit channel
+		maxRetries: maxRetries,                             // Set the maximum retries
+		ctx:        ctx,                                    // Set the context
+		wm:         wm,                                     // Set the webhook messager
 	}
 }
 
@@ -56,15 +56,19 @@ func (s *Service) Start(p Processor) error {
 			if err != nil {
 				if msg.RetryCount < s.maxRetries {
 					msg.RetryCount++
-					s.queue <- msg
+
 					if len(s.queue) == 1 {
 						extraWait := time.Duration(msg.RetryCount) * time.Second
 						time.Sleep(extraWait)
 					}
+
+					s.Enqueue(msg)
 					continue
 				}
 
-				s.wm.NotifyError(s.ctx, err)
+				if s.wm != nil {
+					s.wm.NotifyError(s.ctx, err)
+				}
 			}
 		case <-s.quit:
 			return nil

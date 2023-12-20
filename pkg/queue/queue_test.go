@@ -22,7 +22,7 @@ type TestTxProcessor struct {
 func (p *TestTxProcessor) Process(message indexer.Message) (indexer.Message, error) {
 	defer func() { p.count++ }()
 
-	_, ok := message.Message.(indexer.TxMessage)
+	_, ok := message.Message.(indexer.UserOpMessage)
 	if !ok {
 		return message, p.expectedError
 	}
@@ -59,12 +59,12 @@ func TestProcessMessages(t *testing.T) {
 
 	t.Run("TxMessages", func(t *testing.T) {
 		testCases := []indexer.Message{
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
 		}
 
 		m := &TestTxMessager{t, expectedTxError}
@@ -99,12 +99,12 @@ func TestProcessMessages(t *testing.T) {
 
 	t.Run("TxMessages with 1 invalid", func(t *testing.T) {
 		testCases := []indexer.Message{
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
 			{ID: "invalid", CreatedAt: time.Now(), RetryCount: 0, Message: "invalid"},
-			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}),
+			*indexer.NewTxMessage(common.Address{}, common.Address{}, []byte{}, indexer.UserOp{}),
 		}
 
 		m := &TestTxMessager{t, expectedTxError}

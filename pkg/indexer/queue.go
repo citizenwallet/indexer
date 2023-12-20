@@ -13,10 +13,11 @@ type Message struct {
 	Message    any
 }
 
-type TxMessage struct {
-	From common.Address
-	To   common.Address
-	Data []byte
+type UserOpMessage struct {
+	Paymaster common.Address
+	To        common.Address
+	Data      []byte
+	UserOp    UserOp
 }
 
 func newMessage(message any) *Message {
@@ -28,11 +29,12 @@ func newMessage(message any) *Message {
 	}
 }
 
-func NewTxMessage(from, to common.Address, data []byte) *Message {
-	tx := TxMessage{
-		From: from,
-		To:   to,
-		Data: data,
+func NewTxMessage(pm, to common.Address, data []byte, userop UserOp) *Message {
+	tx := UserOpMessage{
+		Paymaster: pm,
+		To:        to,
+		Data:      data,
+		UserOp:    userop,
 	}
 	return newMessage(tx)
 }

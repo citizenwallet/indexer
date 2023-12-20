@@ -2,6 +2,8 @@ package queue
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/citizenwallet/indexer/pkg/indexer"
@@ -9,9 +11,11 @@ import (
 
 // Service struct represents a queue service with a queue channel, quit channel, maximum retries, context and a webhook messager.
 type Service struct {
+	name       string               // Name of the queue service
 	queue      chan indexer.Message // Channel to enqueue messages
 	quit       chan bool            // Channel to signal service to stop
 	maxRetries int                  // Maximum number of retries for processing a message
+	bufferSize int                  // Buffer size of the queue channel
 
 	ctx context.Context         // Context to carry deadlines, cancellation signals, and other request-scoped values across API boundaries and between processes
 	wm  indexer.WebhookMessager // Webhook messager to notify errors
@@ -23,11 +27,13 @@ type Processor interface {
 }
 
 // NewService function initializes a new Service with provided maximum retries, context and webhook messager.
-func NewService(maxRetries, bufferSize int, ctx context.Context, wm indexer.WebhookMessager) *Service {
+func NewService(name string, maxRetries, bufferSize int, ctx context.Context, wm indexer.WebhookMessager) *Service {
 	return &Service{
+		name:       name,                                   // Set the name
 		queue:      make(chan indexer.Message, bufferSize), // Initialize the buffered queue channel
 		quit:       make(chan bool),                        // Initialize the quit channel
 		maxRetries: maxRetries,                             // Set the maximum retries
+		bufferSize: bufferSize,                             // Set the buffer size
 		ctx:        ctx,                                    // Set the context
 		wm:         wm,                                     // Set the webhook messager
 	}
@@ -35,6 +41,16 @@ func NewService(maxRetries, bufferSize int, ctx context.Context, wm indexer.Webh
 
 // Enqueue method enqueues a message to the queue channel.
 func (s *Service) Enqueue(message indexer.Message) {
+	// if the queue channel is almost full, notify the webhook messager with a warning notification
+	if len(s.queue) > (s.bufferSize / 10) {
+		s.wm.NotifyWarning(s.ctx, errors.New(fmt.Sprintf("%s queue is almost full", s.name)))
+	}
+
+	// if the queue channel is full, notify the webhook messager with an error notification
+	if len(s.queue) == s.bufferSize {
+		s.wm.NotifyError(s.ctx, errors.New(fmt.Sprintf("%s queue is full", s.name)))
+	}
+
 	s.queue <- message
 }
 
@@ -57,7 +73,7 @@ func (s *Service) Start(p Processor) error {
 				if msg.RetryCount < s.maxRetries {
 					msg.RetryCount++
 
-					if len(s.queue) == 1 {
+					if len(s.queue) < 1 {
 						extraWait := time.Duration(msg.RetryCount) * time.Second
 						time.Sleep(extraWait)
 					}

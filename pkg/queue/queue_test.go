@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,11 +36,18 @@ type TestTxMessager struct {
 }
 
 func (m *TestTxMessager) Notify(ctx context.Context, message string) error {
-	m.t.Log(message)
+	return nil
+}
+
+func (m *TestTxMessager) NotifyWarning(ctx context.Context, errorMessage error) error {
 	return nil
 }
 
 func (m *TestTxMessager) NotifyError(ctx context.Context, errorMessage error) error {
+	if strings.Contains(errorMessage.Error(), "queue is full") || strings.Contains(errorMessage.Error(), "queue is almost full") {
+		return nil
+	}
+
 	if errorMessage != m.expectedError {
 		m.t.Fatalf("expected %s, got %s", m.expectedError, errorMessage)
 	}
@@ -60,7 +68,7 @@ func TestProcessMessages(t *testing.T) {
 		}
 
 		m := &TestTxMessager{t, expectedTxError}
-		q := NewService(3, 10, nil, m)
+		q := NewService("tx", 3, 10, nil, m)
 
 		p := &TestTxProcessor{t, len(testCases), 0, expectedTxError}
 
@@ -100,7 +108,7 @@ func TestProcessMessages(t *testing.T) {
 		}
 
 		m := &TestTxMessager{t, expectedTxError}
-		q := NewService(3, 10, nil, m)
+		q := NewService("tx", 3, 10, nil, m)
 
 		p := &TestTxProcessor{t, len(testCases) + 3, 0, expectedTxError}
 

@@ -197,12 +197,6 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the public key from the private key
-	// publicKey := privateKey.Public().(*ecdsa.PublicKey)
-
-	// Convert the public key to an Ethereum address
-	// sponsor := crypto.PubkeyToAddress(*publicKey)
-
 	entryPoint := common.HexToAddress(epAddr)
 
 	// Parse the contract ABI

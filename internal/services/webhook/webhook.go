@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 
 type Message struct {
@@ -18,7 +20,7 @@ type Messager struct {
 	ChainName string
 }
 
-func NewMessager(baseURL, chainName string) *Messager {
+func NewMessager(baseURL, chainName string) indexer.WebhookMessager {
 	return &Messager{
 		BaseURL:   baseURL,
 		ChainName: chainName,

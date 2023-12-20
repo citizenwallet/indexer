@@ -294,6 +294,15 @@ func (db *TransferDB) TransferSimilarExists(from, to, value string) (string, err
 	return hash, nil
 }
 
+// RemoveTransfer removes a sending transfer from the db
+func (db *TransferDB) RemoveTransfer(hash string) error {
+	_, err := db.db.Exec(fmt.Sprintf(`
+	DELETE FROM t_transfers_%s WHERE hash = $1 AND status != 'success'
+	`, db.suffix), hash)
+
+	return err
+}
+
 // RemoveSendingTransfer removes a sending transfer from the db
 func (db *TransferDB) RemoveSendingTransfer(hash string) error {
 	_, err := db.db.Exec(fmt.Sprintf(`

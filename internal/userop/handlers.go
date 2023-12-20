@@ -3,38 +3,37 @@ package userop
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
 	"encoding/json"
 	"math/big"
 	"net/http"
-	"strings"
 	"time"
 
 	comm "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/pkg/indexer"
+	"github.com/citizenwallet/indexer/pkg/queue"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/go-chi/chi/v5"
 )
 
 type Service struct {
 	evm     indexer.EVMRequester
 	db      *db.DB
+	useropq *queue.Service
 	chainId *big.Int
 }
 
 // NewService
-func NewService(evm indexer.EVMRequester, db *db.DB, chid *big.Int) *Service {
+func NewService(evm indexer.EVMRequester, db *db.DB, useropq *queue.Service, chid *big.Int) *Service {
 	return &Service{
 		evm,
 		db,
+		useropq,
 		chid,
 	}
 }
@@ -198,12 +197,6 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the public key from the private key
-	publicKey := privateKey.Public().(*ecdsa.PublicKey)
-
-	// Convert the public key to an Ethereum address
-	sponsor := crypto.PubkeyToAddress(*publicKey)
-
 	entryPoint := common.HexToAddress(epAddr)
 
 	// Parse the contract ABI
@@ -220,105 +213,12 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nonce, err := s.evm.NonceAt(context.Background(), sponsor, nil)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	// Create a new message
+	message := indexer.NewTxMessage(addr, entryPoint, data, s.chainId, userop)
 
-	// TODO: needs a queue system to avoid nonce collisions when submitting multiple transactions
+	// Enqueue the message
+	s.useropq.Enqueue(*message)
 
-	tx, err := s.evm.NewTx(nonce, sponsor, entryPoint, data)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	chainId, err := s.evm.ChainID()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	// Sign the transaction
-	signedTx, err := types.SignTx(tx, types.NewLondonSigner(chainId), privateKey)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	// detect if this userop is a transfer using the calldata
-	// Parse the contract ABI
-	var tdb *db.TransferDB
-	var log *indexer.Transfer
-
-	dest, toaddr, amount, parseErr := comm.ParseERC20Transfer(userop.CallData)
-	if parseErr == nil {
-		// this is an erc20 transfer
-		log = &indexer.Transfer{
-			TokenID:   0,
-			CreatedAt: time.Now(),
-			From:      userop.Sender.Hex(),
-			To:        toaddr.Hex(), //
-			Nonce:     userop.Nonce.Int64(),
-			Value:     amount,
-			Status:    indexer.TransferStatusSending,
-		}
-
-		log.FromTo = log.CombineFromTo()
-
-		log.GenerateTempHash(s.chainId.Int64())
-
-		tdb, ok = s.db.TransferDB[s.db.TransferName(dest.Hex())]
-		if ok {
-			tdb.AddTransfer(log)
-		}
-	}
-
-	err = s.evm.SendTransaction(signedTx)
-	if err != nil {
-		e, ok := err.(rpc.Error)
-		if ok && e.ErrorCode() != -32000 {
-			if parseErr == nil && tdb != nil && log != nil {
-				tdb.RemoveSendingTransfer(log.Hash)
-			}
-
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		if !strings.Contains(e.Error(), "insufficient funds") {
-			if parseErr == nil && tdb != nil && log != nil {
-				tdb.RemoveSendingTransfer(log.Hash)
-			}
-
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		if parseErr == nil && tdb != nil && log != nil {
-			tdb.RemoveSendingTransfer(log.Hash)
-		}
-
-		// insufficient funds
-		w.WriteHeader(http.StatusPreconditionFailed)
-		return
-	}
-
-	if parseErr == nil && tdb != nil && log != nil {
-		err = tdb.SetFinalHash(signedTx.Hash().Hex(), log.Hash)
-		if err != nil {
-			tdb.RemoveSendingTransfer(log.Hash)
-
-			comm.JSONRPCBody(w, signedTx.Hash().Hex(), nil)
-			return
-		}
-
-		err = tdb.SetStatus(string(indexer.TransferStatusSending), signedTx.Hash().Hex())
-		if err != nil {
-			tdb.RemoveSendingTransfer(log.Hash)
-		}
-	}
-
-	comm.JSONRPCBody(w, signedTx.Hash().Hex(), nil)
+	// Return the message ID
+	comm.JSONRPCBody(w, message.ID, nil)
 }

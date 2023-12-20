@@ -43,7 +43,8 @@ func NewService(name string, maxRetries, bufferSize int, ctx context.Context, wm
 // Enqueue method enqueues a message to the queue channel.
 func (s *Service) Enqueue(message indexer.Message) {
 	// if the queue channel is almost full, notify the webhook messager with a warning notification
-	if len(s.queue) > (s.bufferSize / 10) {
+	bufferWarning := s.bufferSize - (s.bufferSize / 10)
+	if len(s.queue) > bufferWarning {
 		s.wm.NotifyWarning(s.ctx, errors.New(fmt.Sprintf("%s queue is almost full", s.name)))
 	}
 

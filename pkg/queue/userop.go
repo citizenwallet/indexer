@@ -15,17 +15,22 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-type TxService struct {
+type UserOpService struct {
 	db  *db.DB
 	evm indexer.EVMRequester
 }
 
-func NewTxService() *TxService {
-	return &TxService{}
+func NewUserOpService(db *db.DB,
+	evm indexer.EVMRequester) *UserOpService {
+	return &UserOpService{
+		db,
+		evm,
+	}
 }
 
 // Process method processes a message of type indexer.Message and returns a processed message and an error if any.
-func (s *TxService) Process(message indexer.Message) (indexer.Message, error) {
+func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error) {
+	println("processing userop")
 	// Type assertion to check if the message is of type indexer.UserOpMessage
 	txm, ok := message.Message.(indexer.UserOpMessage)
 	if !ok {
@@ -63,14 +68,10 @@ func (s *TxService) Process(message indexer.Message) (indexer.Message, error) {
 		return message, err
 	}
 
-	// Get the chain ID
-	chainId, err := s.evm.ChainID()
-	if err != nil {
-		return message, err
-	}
+	println("signing")
 
 	// Sign the transaction
-	signedTx, err := types.SignTx(tx, types.NewLondonSigner(chainId), privateKey)
+	signedTx, err := types.SignTx(tx, types.NewLondonSigner(txm.ChainId), privateKey)
 	if err != nil {
 		return message, err
 	}
@@ -101,7 +102,7 @@ func (s *TxService) Process(message indexer.Message) (indexer.Message, error) {
 		log.FromTo = log.CombineFromTo()
 
 		// Generate a temporary hash for the transfer
-		log.GenerateTempHash(chainId.Int64())
+		log.GenerateTempHash(txm.ChainId.Int64())
 
 		// Get the transfer database for the destination address
 		tdb, ok = s.db.TransferDB[s.db.TransferName(dest.Hex())]
@@ -110,6 +111,8 @@ func (s *TxService) Process(message indexer.Message) (indexer.Message, error) {
 			tdb.AddTransfer(log)
 		}
 	}
+
+	println("sending")
 
 	// Send the signed transaction
 	err = s.evm.SendTransaction(signedTx)
@@ -143,5 +146,23 @@ func (s *TxService) Process(message indexer.Message) (indexer.Message, error) {
 		return message, err
 	}
 
+	println("sent")
+
+	if parseErr == nil && tdb != nil && log != nil {
+		err = tdb.SetFinalHash(signedTx.Hash().Hex(), log.Hash)
+		if err != nil {
+			tdb.RemoveSendingTransfer(log.Hash)
+
+			println("success no final hash")
+			return indexer.Message{}, nil
+		}
+
+		err = tdb.SetStatus(string(indexer.TransferStatusSending), signedTx.Hash().Hex())
+		if err != nil {
+			tdb.RemoveSendingTransfer(log.Hash)
+		}
+	}
+
+	println("success")
 	return indexer.Message{}, nil
 }

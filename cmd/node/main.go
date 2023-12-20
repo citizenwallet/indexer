@@ -17,6 +17,7 @@ import (
 	"github.com/citizenwallet/indexer/internal/services/webhook"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/indexer"
+	"github.com/citizenwallet/indexer/pkg/queue"
 	"github.com/citizenwallet/indexer/pkg/router"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/getsentry/sentry-go"
@@ -167,15 +168,23 @@ func main() {
 		log.Fatal(err)
 	}
 
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, bu, fb, privateKey)
+	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName)
+
+	op := queue.NewUserOpService(d, evm)
+
+	useropq := queue.NewService("userop", 3, 10, ctx, w)
+
+	go func() {
+		quitAck <- useropq.Start(op)
+	}()
+
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, useropq, bu, fb, privateKey)
 
 	go func() {
 		quitAck <- api.Start(*port)
 	}()
 
 	log.Default().Println("listening on port: ", *port)
-
-	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName)
 
 	for err := range quitAck {
 		if err != nil {

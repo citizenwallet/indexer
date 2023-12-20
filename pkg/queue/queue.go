@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/citizenwallet/indexer/pkg/indexer"
@@ -65,9 +66,11 @@ func (s *Service) Close() {
 // It also notifies errors using the webhook messager.
 // The service can be stopped by sending a signal to the quit channel.
 func (s *Service) Start(p Processor) error {
+	log.Default().Println(fmt.Sprintf("starting queue service '%s'", s.name))
 	for {
 		select {
 		case message := <-s.queue:
+			log.Default().Println("processing message")
 			msg, err := p.Process(message)
 			if err != nil {
 				if msg.RetryCount < s.maxRetries {
@@ -87,6 +90,7 @@ func (s *Service) Start(p Processor) error {
 				}
 			}
 		case <-s.quit:
+			log.Default().Println(fmt.Sprintf("stopping queue service '%s'", s.name))
 			return nil
 		}
 	}

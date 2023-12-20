@@ -19,6 +19,7 @@ import (
 	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/internal/userop"
 	"github.com/citizenwallet/indexer/pkg/indexer"
+	"github.com/citizenwallet/indexer/pkg/queue"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -31,12 +32,13 @@ type Router struct {
 	prfAddr      string
 	evm          indexer.EVMRequester
 	db           *db.DB
+	useropq      *queue.Service
 	b            *bucket.Bucket
 	firebase     *firebase.PushService
 	paymasterKey *ecdsa.PrivateKey
 }
 
-func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm indexer.EVMRequester, db *db.DB, b *bucket.Bucket, firebase *firebase.PushService, pk *ecdsa.PrivateKey) *Router {
+func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm indexer.EVMRequester, db *db.DB, useropq *queue.Service, b *bucket.Bucket, firebase *firebase.PushService, pk *ecdsa.PrivateKey) *Router {
 	return &Router{
 		chainId,
 		apiKey,
@@ -45,6 +47,7 @@ func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr str
 		prfAddr,
 		evm,
 		db,
+		useropq,
 		b,
 		firebase,
 		pk,
@@ -79,7 +82,7 @@ func (r *Router) Start(port int) error {
 	acc := accounts.NewService(r.evm, r.accFactAddr, r.db, r.paymasterKey)
 
 	pm := paymaster.NewService(r.evm, r.db)
-	uop := userop.NewService(r.evm, r.db, r.chainId)
+	uop := userop.NewService(r.evm, r.db, r.useropq, r.chainId)
 
 	// instantiate legacy handlers
 	legl := logs.NewLegacyService(r.chainId, r.db, comm)

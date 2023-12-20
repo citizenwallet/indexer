@@ -70,7 +70,6 @@ func (s *Service) Start(p Processor) error {
 	for {
 		select {
 		case message := <-s.queue:
-			log.Default().Println("processing message")
 			msg, err := p.Process(message)
 			if err != nil {
 				if msg.RetryCount < s.maxRetries {

@@ -30,7 +30,6 @@ func NewUserOpService(db *db.DB,
 
 // Process method processes a message of type indexer.Message and returns a processed message and an error if any.
 func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error) {
-	println("processing userop")
 	// Type assertion to check if the message is of type indexer.UserOpMessage
 	txm, ok := message.Message.(indexer.UserOpMessage)
 	if !ok {
@@ -67,8 +66,6 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 	if err != nil {
 		return message, err
 	}
-
-	println("signing")
 
 	// Sign the transaction
 	signedTx, err := types.SignTx(tx, types.NewLondonSigner(txm.ChainId), privateKey)
@@ -112,8 +109,6 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 		}
 	}
 
-	println("sending")
-
 	// Send the signed transaction
 	err = s.evm.SendTransaction(signedTx)
 	if err != nil {
@@ -146,14 +141,11 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 		return message, err
 	}
 
-	println("sent")
-
 	if parseErr == nil && tdb != nil && log != nil {
 		err = tdb.SetFinalHash(signedTx.Hash().Hex(), log.Hash)
 		if err != nil {
 			tdb.RemoveSendingTransfer(log.Hash)
 
-			println("success no final hash")
 			return indexer.Message{}, nil
 		}
 
@@ -163,6 +155,14 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 		}
 	}
 
-	println("success")
+	err = s.evm.WaitForTx(signedTx)
+	if err != nil {
+		if parseErr == nil && tdb != nil && log != nil {
+			tdb.RemoveSendingTransfer(log.Hash)
+		}
+
+		return message, err
+	}
+
 	return indexer.Message{}, nil
 }

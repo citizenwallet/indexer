@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -19,14 +20,15 @@ const (
 	ETHChainID            = "eth_chainId"
 )
 
+type EthBlock struct {
+	Number    string `json:"number"`
+	Timestamp string `json:"timestamp"`
+}
+
 type EthService struct {
 	rpc    *rpc.Client
 	client *ethclient.Client
 	ctx    context.Context
-}
-
-func (e *EthService) Client() *ethclient.Client {
-	return e.client
 }
 
 func (e *EthService) Context() context.Context {
@@ -46,6 +48,114 @@ func NewEthService(ctx context.Context, endpoint string) (*EthService, error) {
 
 func (e *EthService) Close() {
 	e.client.Close()
+}
+
+func (e *EthService) BlockTime(number *big.Int) (uint64, error) {
+	blk, err := e.client.BlockByNumber(e.ctx, number)
+	if err != nil {
+		return 0, err
+	}
+
+	return blk.Time(), nil
+}
+
+func (e *EthService) Backend() bind.ContractBackend {
+	return e.client
+}
+
+func (e *EthService) CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error) {
+	return e.client.CodeAt(e.ctx, account, blockNumber)
+}
+
+func (e *EthService) NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error) {
+	return e.client.NonceAt(e.ctx, account, blockNumber)
+}
+
+func (e *EthService) BaseFee() (*big.Int, error) {
+	// Get the latest block header
+	header, err := e.client.HeaderByNumber(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return header.BaseFee, nil
+}
+
+func (e *EthService) EstimateGasPrice() (*big.Int, error) {
+	return e.client.SuggestGasPrice(e.ctx)
+}
+
+func (e *EthService) EstimateGasLimit(msg ethereum.CallMsg) (uint64, error) {
+	return e.client.EstimateGas(e.ctx, msg)
+}
+
+func (e *EthService) NewTx(nonce uint64, from, to common.Address, data []byte) (*types.Transaction, error) {
+	baseFee, err := e.BaseFee()
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the priority fee per gas (miner tip)
+	tip, err := e.MaxPriorityFeePerGas()
+	if err != nil {
+		return nil, err
+	}
+
+	buffer := new(big.Int).Div(tip, big.NewInt(100))
+
+	maxPriorityFeePerGas := new(big.Int).Add(tip, buffer)
+
+	maxFeePerGas := new(big.Int).Add(maxPriorityFeePerGas, new(big.Int).Mul(baseFee, big.NewInt(2)))
+
+	// Prepare the call message
+	msg := ethereum.CallMsg{
+		From:     from, // the account executing the function
+		To:       &to,
+		Gas:      0,    // set to 0 for estimation
+		GasPrice: nil,  // set to nil for estimation
+		Value:    nil,  // set to nil for estimation
+		Data:     data, // the function call data
+	}
+
+	gasLimit, err := e.EstimateGasLimit(msg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new dynamic fee transaction
+	tx := types.NewTx(&types.DynamicFeeTx{
+		Nonce:     nonce,
+		GasFeeCap: maxFeePerGas,
+		GasTipCap: maxPriorityFeePerGas,
+		Gas:       gasLimit + (gasLimit / 2), // make sure there is some margin for spikes
+		To:        &to,
+		Value:     common.Big0,
+		Data:      data,
+	})
+	return tx, nil
+}
+
+func (e *EthService) SendTransaction(tx *types.Transaction) error {
+	return e.client.SendTransaction(e.ctx, tx)
+}
+
+func (e *EthService) MaxPriorityFeePerGas() (*big.Int, error) {
+	var hexFee string
+	err := e.rpc.Call(&hexFee, "eth_maxPriorityFeePerGas")
+	if err != nil {
+		return common.Big0, err
+	}
+
+	fee := new(big.Int)
+	_, ok := fee.SetString(hexFee[2:], 16) // remove the "0x" prefix and parse as base 16
+	if !ok {
+		return nil, errors.New("invalid hex string")
+	}
+
+	return fee, nil
+}
+
+func (e *EthService) StorageAt(addr common.Address, slot common.Hash) ([]byte, error) {
+	return e.client.StorageAt(e.ctx, addr, slot, nil)
 }
 
 func (e *EthService) EstimateFullGas(from common.Address, tx *types.Transaction) (uint64, error) {
@@ -72,17 +182,6 @@ func (e *EthService) EstimateGas(from, to string, value uint64) (uint64, error) 
 		From:  common.HexToAddress(from),
 		To:    &t,
 		Value: big.NewInt(int64(value)),
-		Gas:   0,
-	}
-
-	return e.client.EstimateGas(e.ctx, msg)
-}
-
-func (e *EthService) EstimateGasPrice(from string, value uint64, data []byte) (uint64, error) {
-	msg := ethereum.CallMsg{
-		From:  common.HexToAddress(from),
-		Value: big.NewInt(int64(value)),
-		Data:  data,
 		Gas:   0,
 	}
 
@@ -116,8 +215,13 @@ func (e *EthService) SendRawTransaction(tx string) ([]byte, error) {
 	return nil, err
 }
 
-func (e *EthService) LatestBlock() (*types.Block, error) {
-	return e.client.BlockByNumber(e.ctx, nil)
+func (e *EthService) LatestBlock() (*big.Int, error) {
+	blk, err := e.client.BlockByNumber(e.ctx, nil)
+	if err != nil {
+		return common.Big0, err
+	}
+
+	return blk.Number(), nil
 }
 
 func (e *EthService) BlockByNumber(number *big.Int) (*types.Block, error) {
@@ -153,6 +257,19 @@ func (e *EthService) NextNonce(address string) (uint64, error) {
 
 func (e *EthService) GetCode(address common.Address) ([]byte, error) {
 	return e.client.CodeAt(e.ctx, address, nil)
+}
+
+func (e *EthService) WaitForTx(tx *types.Transaction) error {
+	rcpt, err := bind.WaitMined(e.ctx, e.client, tx)
+	if err != nil {
+		return err
+	}
+
+	if rcpt.Status != types.ReceiptStatusSuccessful {
+		return errors.New("tx failed")
+	}
+
+	return nil
 }
 
 func makeValidEvenHex(h string) string {

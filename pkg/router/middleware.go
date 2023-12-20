@@ -11,10 +11,14 @@ import (
 	"time"
 
 	"github.com/citizenwallet/indexer/pkg/indexer"
+	"github.com/citizenwallet/smartcontracts/pkg/contracts/account"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -38,7 +42,10 @@ var (
 		"Authorization",
 		indexer.SignatureHeader,
 		indexer.AddressHeader,
+		indexer.AppVersionHeader,
 	}
+
+	MAGIC_VALUE = [4]byte{0x16, 0x26, 0xba, 0x7e}
 )
 
 // HealthMiddleware is a middleware that responds to health checks
@@ -121,8 +128,8 @@ type signedBody struct {
 	Version  int          `json:"version"`
 }
 
-// withSignature is a middleware that checks the signature of the request against the request body
-func withSignature(h http.HandlerFunc) http.HandlerFunc {
+// withSignature is a middleware that checks the signature of the request against the request headers
+func withSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// check signature
 		signature := r.Header.Get(indexer.SignatureHeader)
@@ -145,17 +152,26 @@ func withSignature(h http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		haccaddr := common.HexToAddress(addr)
+
 		// check signature
 		switch req.Version {
 		case 0:
 			// LEGACY: remove 3 months from 22/10/2023
 			// reason: verifySignature only verifies the data and not the entire request, the expiry time can be manipulated
-			if !verifySignature(req, addr, signature) {
+			if !verifySignature(req, haccaddr, signature) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		case 2:
+			// DEPRECATED: remove 3 months from 14/11/2023
+			// reason: does not support ERC1271
+			if !verifyV2Signature(req, haccaddr, signature) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 		default:
-			if !verifyV2Signature(req, addr, signature) {
+			if !verify1271Signature(evm, req, haccaddr, signature) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
@@ -165,14 +181,15 @@ func withSignature(h http.HandlerFunc) http.HandlerFunc {
 		r.ContentLength = int64(len(req.Data))
 
 		ctx := context.WithValue(r.Context(), indexer.ContextKeyAddress, addr)
+		ctx = context.WithValue(ctx, indexer.ContextKeySignature, signature)
 
 		h(w, r.WithContext(ctx))
 		return
 	})
 }
 
-// withMultiPartSignature is a middleware that checks the signature of the request against a multi-part request body
-func withMultiPartSignature(h http.HandlerFunc) http.HandlerFunc {
+// withMultiPartSignature is a middleware that checks the signature of the request against a multi-part request headers
+func withMultiPartSignature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// check signature
 		signature := r.Header.Get(indexer.SignatureHeader)
@@ -196,17 +213,26 @@ func withMultiPartSignature(h http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		haccaddr := common.HexToAddress(addr)
+
 		// check signature
 		switch req.Version {
 		case 0:
 			// LEGACY: remove 3 months from 22/10/2023
 			// reason: verifySignature only verifies the data and not the entire request, the expiry time can be manipulated
-			if !verifySignature(req, addr, signature) {
+			if !verifySignature(req, haccaddr, signature) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		case 2:
+			// DEPRECATED: remove 3 months from 14/11/2023
+			// reason: does not support ERC1271
+			if !verifyV2Signature(req, haccaddr, signature) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 		default:
-			if !verifyV2Signature(req, addr, signature) {
+			if !verify1271Signature(evm, req, haccaddr, signature) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
@@ -221,10 +247,80 @@ func withMultiPartSignature(h http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
+// with1271Signature is a middleware that checks the owner's signature of the request against the request headers and the actual account on-chain
+func with1271Signature(evm indexer.EVMRequester, h http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// parse signature from header
+		signature := r.Header.Get(indexer.SignatureHeader)
+		if signature == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		var req signedBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		// get address
+		addr := r.Header.Get(indexer.AddressHeader)
+		if addr == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		haccaddr := common.HexToAddress(addr)
+
+		// check signature
+		if !verify1271Signature(evm, req, haccaddr, signature) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		r.Body = io.NopCloser(strings.NewReader(string(req.Data)))
+		r.ContentLength = int64(len(req.Data))
+
+		ctx := context.WithValue(r.Context(), indexer.ContextKeyAddress, addr)
+		ctx = context.WithValue(ctx, indexer.ContextKeySignature, signature)
+
+		h(w, r.WithContext(ctx))
+		return
+	})
+}
+
+// withJSONRPCRequest is a middleware that handles a JSON RPC request
+func withJSONRPCRequest(hmap map[string]http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		// parse request
+		var req indexer.JsonRPCRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		// check if the method is available
+		h, ok := hmap[req.Method]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		r.Body = io.NopCloser(strings.NewReader(string(req.Params)))
+		r.ContentLength = int64(len([]byte(req.Params)))
+
+		h(w, r)
+		return
+	})
+}
+
 // verifySignature verifies the signature of the request against the request body
 //
 // Deprecated: verifySignature incorrectly verifies only the data and not the entire request
-func verifySignature(req signedBody, addr string, signature string) bool {
+func verifySignature(req signedBody, addr common.Address, signature string) bool {
 	// verify that the signature is a legacy signature
 	if req.Version != 0 {
 		return false
@@ -253,10 +349,8 @@ func verifySignature(req signedBody, addr string, signature string) bool {
 	// derive the address from the public key
 	address := crypto.PubkeyToAddress(*pubkey.ToECDSA())
 
-	recoveredaddr := address.Hex()
-
 	// the address in the request must match the address derived from the signature
-	if strings.ToLower(recoveredaddr) != strings.ToLower(addr) {
+	if address != addr {
 		return false
 	}
 
@@ -278,7 +372,7 @@ func verifySignature(req signedBody, addr string, signature string) bool {
 }
 
 // verifyV2Signature verifies the signature of the request against the entire request body
-func verifyV2Signature(req signedBody, addr string, signature string) bool {
+func verifyV2Signature(req signedBody, addr common.Address, signature string) bool {
 	// verify that the signature is v2
 	if req.Version != 2 {
 		return false
@@ -312,10 +406,8 @@ func verifyV2Signature(req signedBody, addr string, signature string) bool {
 	// derive the address from the public key
 	address := crypto.PubkeyToAddress(*pubkey.ToECDSA())
 
-	recoveredaddr := address.Hex()
-
 	// the address in the request must match the address derived from the signature
-	if strings.ToLower(recoveredaddr) != strings.ToLower(addr) {
+	if address != addr {
 		return false
 	}
 
@@ -334,6 +426,96 @@ func verifyV2Signature(req signedBody, addr string, signature string) bool {
 
 	// verify the signature
 	return ns.Verify(h.Bytes(), pubkey)
+}
+
+// verify1271Signature verifies the signature of the request against the actual account on-chain if local fails
+func verify1271Signature(evm indexer.EVMRequester, req signedBody, accaddr common.Address, signature string) bool {
+	// verify that the signature is v3
+	if req.Version != 3 {
+		return false
+	}
+
+	// verify if the signature has expired
+	if req.Expiry < time.Now().UTC().Unix() {
+		return false
+	}
+
+	// decode the signature
+	sig, err := hexutil.Decode(signature)
+	if err != nil {
+		return false
+	}
+
+	if sig[crypto.RecoveryIDOffset] == 27 || sig[crypto.RecoveryIDOffset] == 28 {
+		sig[crypto.RecoveryIDOffset] -= 27
+	}
+
+	// hash the entire request data
+	b, err := json.Marshal(req)
+	if err != nil {
+		return false
+	}
+
+	h := accounts.TextHash(crypto.Keccak256(b))
+
+	var h32 [32]byte
+	copy(h32[:], h)
+
+	// check if the signature belongs to the owner
+	pkey, err := crypto.SigToPub(h, sig)
+	if err != nil {
+		return false
+	}
+
+	// derive the address from the public key
+	address := crypto.PubkeyToAddress(*pkey)
+
+	// classic signature verification
+	if address == accaddr {
+		return true
+	}
+
+	// check on chain if it is a valid account and the signer is the owner
+
+	// Get the contract's bytecode
+	bytecode, err := evm.CodeAt(context.Background(), accaddr, nil)
+	if err != nil {
+		return false
+	}
+
+	// Check if the account is deployed
+	if len(bytecode) == 0 {
+		return false
+	}
+
+	acc, err := account.NewAccount(accaddr, evm.Backend())
+	if err != nil {
+		return false
+	}
+
+	if sig[crypto.RecoveryIDOffset] == 0 || sig[crypto.RecoveryIDOffset] == 1 {
+		sig[crypto.RecoveryIDOffset] += 27
+	}
+
+	// verify the signature
+	v, err := acc.IsValidSignature(nil, h32, sig)
+	if err == nil {
+		return v == MAGIC_VALUE
+	}
+
+	// an error occured, check if it is because the method is not implemented
+	e, ok := err.(rpc.Error)
+	if ok && e.ErrorCode() != -32000 {
+		return false
+	}
+
+	// not implemented, check the owner manually
+	owner, err := acc.Owner(nil)
+	if err != nil {
+		return false
+	}
+
+	return owner == address
 }
 
 // compactSignature gets the v, r, and s values and compacts them into a 65 byte array

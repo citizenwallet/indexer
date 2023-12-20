@@ -1,7 +1,6 @@
 package index
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -21,7 +20,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type ErrIndexing error
@@ -30,34 +28,15 @@ var (
 	ErrIndexingRecoverable ErrIndexing = errors.New("error indexing recoverable") // an error occurred while indexing but it is not fatal
 )
 
-type EVMType string
-
-const (
-	EVMTypeEthereum EVMType = "ethereum"
-	EVMTypeOptimism EVMType = "optimism"
-)
-
-type EVMRequester interface {
-	Context() context.Context
-	Client() *ethclient.Client
-
-	ChainID() (*big.Int, error)
-	LatestBlock() (*types.Block, error)
-	FilterLogs(q ethereum.FilterQuery) ([]types.Log, error)
-	BlockByNumber(number *big.Int) (*types.Block, error)
-
-	Close()
-}
-
 type Indexer struct {
 	rate    int
 	chainID *big.Int
 	db      *db.DB
-	evm     EVMRequester
+	evm     indexer.EVMRequester
 	fb      *firebase.PushService
 }
 
-func New(rate int, chainID *big.Int, db *db.DB, evm EVMRequester, fb *firebase.PushService) (*Indexer, error) {
+func New(rate int, chainID *big.Int, db *db.DB, evm indexer.EVMRequester, fb *firebase.PushService) (*Indexer, error) {
 	return &Indexer{
 		rate:    rate,
 		chainID: chainID,
@@ -69,11 +48,10 @@ func New(rate int, chainID *big.Int, db *db.DB, evm EVMRequester, fb *firebase.P
 
 func (i *Indexer) IndexERC20From(contract string, from int64) error {
 	// get the latest block
-	latestBlock, err := i.evm.LatestBlock()
+	curr, err := i.evm.LatestBlock()
 	if err != nil {
 		return ErrIndexingRecoverable
 	}
-	curr := latestBlock.Number()
 
 	ev, err := i.db.EventDB.GetEvent(contract, indexer.ERC20)
 	if err != nil {
@@ -86,11 +64,10 @@ func (i *Indexer) IndexERC20From(contract string, from int64) error {
 // Start starts the indexer service
 func (i *Indexer) Start() error {
 	// get the latest block
-	latestBlock, err := i.evm.LatestBlock()
+	curr, err := i.evm.LatestBlock()
 	if err != nil {
 		return ErrIndexingRecoverable
 	}
-	curr := latestBlock.Number()
 
 	// check if there are any queued events
 	evs, err := i.db.EventDB.GetOutdatedEvents(curr.Int64())
@@ -154,8 +131,6 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 }
 
 func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
-	log.Default().Println("indexing event: ", ev.Contract, ev.Standard, " from block: ", ev.LastBlock, " to block: ", curr.Int64(), " ...")
-
 	// check if the event last block matches the latest block of the chain
 	if ev.LastBlock >= curr.Int64() {
 		// event is up to date
@@ -164,7 +139,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			return err
 		}
 
-		log.Default().Println("nothing to do")
 		return nil
 	}
 
@@ -228,8 +202,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			startBlock = ev.LastBlock + 1
 		}
 
-		log.Default().Println("indexing block: ", startBlock, " to block: ", blockNum, " ...")
-
 		query := ethereum.FilterQuery{
 			FromBlock: big.NewInt(startBlock),
 			ToBlock:   big.NewInt(blockNum),
@@ -246,16 +218,16 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 			txs := []*indexer.Transfer{}
 
 			// store a map of blocks by block number
-			blks := map[int64]*types.Block{}
+			blks := make(map[int64]uint64)
 
-			for index, l := range logs {
+			for _, l := range logs {
 				// to reduce API consumption, cache blocks by number
 
 				// check if it was already fetched
 				blk, ok := blks[int64(l.BlockNumber)]
 				if !ok {
 					// was not fetched yet, fetch it
-					blk, err = i.evm.BlockByNumber(big.NewInt(int64(l.BlockNumber)))
+					blk, err = i.evm.BlockTime(big.NewInt(int64(l.BlockNumber)))
 					if err != nil {
 						return ErrIndexingRecoverable
 					}
@@ -264,11 +236,7 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 					blks[int64(l.BlockNumber)] = blk
 				}
 
-				blktime := time.UnixMilli(int64(blk.Time()) * 1000).UTC()
-
-				if index == 0 {
-					log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " [", blktime, "] ...")
-				}
+				blktime := time.UnixMilli(int64(blk) * 1000).UTC()
 
 				switch ev.Standard {
 				case indexer.ERC20:
@@ -311,7 +279,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 						hash, _ := txdb.TransferSimilarExists(tx.From, tx.To, tx.Value.String())
 
 						if hash != "" {
-							log.Default().Println("optimistic tx found: ", hash, " ", tx.Nonce)
 							// there is an optimistic transaction, set its tx_hash and status
 							err = txdb.ReconcileTx(tx.TxHash, hash, tx.Nonce)
 							if err != nil {
@@ -320,9 +287,6 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 
 							continue
 						}
-
-						// generate a hash
-						tx.GenerateHash(i.chainID.Int64())
 
 						newTxs = append(newTxs, tx)
 						continue
@@ -408,19 +372,14 @@ func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
 		return err
 	}
 
-	log.Default().Println("done")
-
 	return nil
 }
 
 func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
-	log.Default().Println("indexing event: ", ev.Contract, ev.Standard, " from block: ", ev.LastBlock, " to block: ", curr.Int64(), " ...")
-
 	// check if the event last block matches the latest block of the chain
 	if from.Int64() >= curr.Int64() {
 		// event is up to date
 
-		log.Default().Println("nothing to do")
 		return nil
 	}
 
@@ -488,16 +447,16 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 			txs := []*indexer.Transfer{}
 
 			// store a map of blocks by block number
-			blks := map[int64]*types.Block{}
+			blks := make(map[int64]uint64)
 
-			for index, l := range logs {
+			for _, l := range logs {
 				// to reduce API consumption, cache blocks by number
 
 				// check if it was already fetched
 				blk, ok := blks[int64(l.BlockNumber)]
 				if !ok {
 					// was not fetched yet, fetch it
-					blk, err = i.evm.BlockByNumber(big.NewInt(int64(l.BlockNumber)))
+					blk, err = i.evm.BlockTime(big.NewInt(int64(l.BlockNumber)))
 					if err != nil {
 						return ErrIndexingRecoverable
 					}
@@ -506,11 +465,7 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 					blks[int64(l.BlockNumber)] = blk
 				}
 
-				blktime := time.UnixMilli(int64(blk.Time()) * 1000).UTC()
-
-				if index == 0 {
-					log.Default().Println("found ", len(logs), " logs between ", startBlock, " and ", blockNum, " [", blktime, "] ...")
-				}
+				blktime := time.UnixMilli(int64(blk) * 1000).UTC()
 
 				switch ev.Standard {
 				case indexer.ERC20:
@@ -553,7 +508,6 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 						hash, _ := txdb.TransferSimilarExists(tx.From, tx.To, tx.Value.String())
 
 						if hash != "" {
-							log.Default().Println("optimistic tx found: ", hash, " ", tx.Nonce)
 							// there is an optimistic transaction, set its tx_hash and status
 							err = txdb.ReconcileTx(tx.TxHash, hash, tx.Nonce)
 							if err != nil {
@@ -562,9 +516,6 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 
 							continue
 						}
-
-						// generate a hash
-						tx.GenerateHash(i.chainID.Int64())
 
 						newTxs = append(newTxs, tx)
 						continue
@@ -589,8 +540,6 @@ func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
 		blockNum = startBlock - 1
 	}
 
-	log.Default().Println("done")
-
 	return nil
 }
 
@@ -606,6 +555,7 @@ func getERC20Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexe
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
 	return &indexer.Transfer{
+		Hash:      log.TxHash.Hex(),
 		TxHash:    log.TxHash.Hex(),
 		TokenID:   0,
 		CreatedAt: blktime,
@@ -629,6 +579,7 @@ func getERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*index
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
 	return &indexer.Transfer{
+		Hash:      log.TxHash.Hex(),
 		TxHash:    log.TxHash.Hex(),
 		TokenID:   trsf.TokenId.Int64(),
 		CreatedAt: blktime,
@@ -658,6 +609,7 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 		trsf.To = common.HexToAddress(log.Topics[3].Hex())
 
 		txs = append(txs, &indexer.Transfer{
+			Hash:      log.TxHash.Hex(),
 			TxHash:    log.TxHash.Hex(),
 			TokenID:   trsf.Id.Int64(),
 			CreatedAt: blktime,
@@ -684,6 +636,7 @@ func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*i
 
 		for i, id := range trsf.Ids {
 			txs = append(txs, &indexer.Transfer{
+				Hash:      log.TxHash.Hex(),
 				TxHash:    log.TxHash.Hex(),
 				TokenID:   id.Int64(),
 				CreatedAt: blktime,

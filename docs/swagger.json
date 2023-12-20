@@ -1,0 +1,110 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "This is a server which handles token contract indexing, user operations, and other support functions for the app.",
+        "title": "Citizen Wallet Indexer API",
+        "termsOfService": "https://citizenwallet.xyz",
+        "contact": {
+            "name": "API Support",
+            "url": "https://github.com/citizenwallet",
+            "email": "support@citizenspring.earth"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://raw.githubusercontent.com/citizenwallet/indexer/main/LICENSE"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:3000",
+    "basePath": "/",
+    "paths": {
+        "/logs/transfers/{token_address}/{acc_addr}": {
+            "get": {
+                "description": "get transfer logs for a given token and account",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "logs"
+                ],
+                "summary": "Fetch transfer logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Token Contract Address",
+                        "name": "token_address",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Address of the account",
+                        "name": "acc_address",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/common.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "description": "Not Found"
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "common.Response": {
+            "type": "object",
+            "properties": {
+                "array": {},
+                "meta": {},
+                "object": {},
+                "response_type": {
+                    "description": "The response type\nin: body",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/common.ResponseType"
+                        }
+                    ]
+                }
+            }
+        },
+        "common.ResponseType": {
+            "type": "string",
+            "enum": [
+                "object",
+                "array",
+                "secure"
+            ],
+            "x-enum-varnames": [
+                "ResponseTypeObject",
+                "ResponseTypeArray",
+                "ResponseTypeSecure"
+            ]
+        }
+    },
+    "securityDefinitions": {
+        "Authorization Bearer": {
+            "type": "basic"
+        }
+    },
+    "externalDocs": {
+        "description": "OpenAPI",
+        "url": "https://swagger.io/resources/open-api/"
+    }
+}

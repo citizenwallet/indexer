@@ -19,12 +19,13 @@ type DB struct {
 	rdb     *sql.DB
 
 	EventDB     *EventDB
+	SponsorDB   *SponsorDB
 	TransferDB  map[string]*TransferDB
 	PushTokenDB map[string]*PushTokenDB
 }
 
 // NewDB instantiates a new DB
-func NewDB(chainID *big.Int, username, password, name, host, rhost string) (*DB, error) {
+func NewDB(chainID *big.Int, username, password, name, host, rhost, secret string) (*DB, error) {
 	connStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, host)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -54,11 +55,17 @@ func NewDB(chainID *big.Int, username, password, name, host, rhost string) (*DB,
 		return nil, err
 	}
 
+	sponsorDB, err := NewSponsorDB(db, rdb, evname, secret)
+	if err != nil {
+		return nil, err
+	}
+
 	d := &DB{
-		chainID: chainID,
-		db:      db,
-		rdb:     rdb,
-		EventDB: eventDB,
+		chainID:   chainID,
+		db:        db,
+		rdb:       rdb,
+		EventDB:   eventDB,
+		SponsorDB: sponsorDB,
 	}
 
 	// check if db exists before opening, since we use rwc mode
@@ -76,6 +83,26 @@ func NewDB(chainID *big.Int, username, password, name, host, rhost string) (*DB,
 
 		// create indexes
 		err = eventDB.CreateEventsTableIndexes(evname)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// check if db exists before opening, since we use rwc mode
+	exists, err = d.SponsorTableExists(evname)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		// create table
+		err = sponsorDB.CreateSponsorsTable(evname)
+		if err != nil {
+			return nil, err
+		}
+
+		// create indexes
+		err = sponsorDB.CreateSponsorsTableIndexes(evname)
 		if err != nil {
 			return nil, err
 		}
@@ -161,6 +188,24 @@ func (db *DB) EventTableExists(suffix string) (bool, error) {
         FROM information_schema.tables
         WHERE table_schema = 'public'
         AND table_name = 't_events_%s'
+    );
+    `, suffix)).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+// SponsorTableExists checks if a table exists in the database
+func (db *DB) SponsorTableExists(suffix string) (bool, error) {
+	var exists bool
+	err := db.db.QueryRow(fmt.Sprintf(`
+    SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_name = 't_sponsors_%s'
     );
     `, suffix)).Scan(&exists)
 	if err != nil {
@@ -288,5 +333,11 @@ func (d *DB) Close() error {
 
 		delete(d.PushTokenDB, i)
 	}
+
+	err := d.SponsorDB.Close()
+	if err != nil {
+		return err
+	}
+
 	return d.EventDB.Close()
 }

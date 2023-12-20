@@ -1,0 +1,78 @@
+basePath: /
+definitions:
+  common.Response:
+    properties:
+      array: {}
+      meta: {}
+      object: {}
+      response_type:
+        allOf:
+        - $ref: '#/definitions/common.ResponseType'
+        description: |-
+          The response type
+          in: body
+    type: object
+  common.ResponseType:
+    enum:
+    - object
+    - array
+    - secure
+    type: string
+    x-enum-varnames:
+    - ResponseTypeObject
+    - ResponseTypeArray
+    - ResponseTypeSecure
+externalDocs:
+  description: OpenAPI
+  url: https://swagger.io/resources/open-api/
+host: localhost:3000
+info:
+  contact:
+    email: support@citizenspring.earth
+    name: API Support
+    url: https://github.com/citizenwallet
+  description: This is a server which handles token contract indexing, user operations,
+    and other support functions for the app.
+  license:
+    name: MIT
+    url: https://raw.githubusercontent.com/citizenwallet/indexer/main/LICENSE
+  termsOfService: https://citizenwallet.xyz
+  title: Citizen Wallet Indexer API
+  version: "1.0"
+paths:
+  /logs/transfers/{token_address}/{acc_addr}:
+    get:
+      consumes:
+      - application/json
+      description: get transfer logs for a given token and account
+      parameters:
+      - description: Token Contract Address
+        in: path
+        name: token_address
+        required: true
+        type: string
+      - description: Address of the account
+        in: path
+        name: acc_address
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/common.Response'
+        "400":
+          description: Bad Request
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+      summary: Fetch transfer logs
+      tags:
+      - logs
+securityDefinitions:
+  Authorization Bearer:
+    type: basic
+swagger: "2.0"

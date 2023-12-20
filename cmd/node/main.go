@@ -1,7 +1,10 @@
+//go:generate swagger generate spec
+
 package main
 
 import (
 	"context"
+	"encoding/hex"
 	"flag"
 	"log"
 	"time"
@@ -11,13 +14,33 @@ import (
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/internal/services/firebase"
-	"github.com/citizenwallet/indexer/internal/services/oprequest"
 	"github.com/citizenwallet/indexer/internal/services/webhook"
 	"github.com/citizenwallet/indexer/pkg/index"
+	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/indexer/pkg/router"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/getsentry/sentry-go"
 )
 
+// @title           Citizen Wallet Indexer API
+// @version         1.0
+// @description     This is a server which handles token contract indexing, user operations, and other support functions for the app.
+// @termsOfService  https://citizenwallet.xyz
+
+// @contact.name   API Support
+// @contact.url    https://github.com/citizenwallet
+// @contact.email  support@citizenspring.earth
+
+// @license.name  MIT
+// @license.url   https://raw.githubusercontent.com/citizenwallet/indexer/main/LICENSE
+
+// @host      localhost:3000
+// @BasePath  /
+
+// @securityDefinitions.basic  Authorization Bearer
+
+// @externalDocs.description  OpenAPI
+// @externalDocs.url          https://swagger.io/resources/open-api/
 func main() {
 	log.Default().Println("launching indexer...")
 
@@ -33,7 +56,7 @@ func main() {
 
 	rate := flag.Int("rate", 99, "rate to sync (default: 99)")
 
-	evmtype := flag.String("evm", string(index.EVMTypeEthereum), "which evm to use (default: ethereum)")
+	evmtype := flag.String("evm", string(indexer.EVMTypeEthereum), "which evm to use (default: ethereum)")
 
 	fbpath := flag.String("fbpath", "firebase.json", "path to firebase credentials")
 
@@ -71,15 +94,20 @@ func main() {
 		log.Default().Println("running in standard http mode...")
 	}
 
-	var evm index.EVMRequester
-	switch index.EVMType(*evmtype) {
-	case index.EVMTypeEthereum:
+	var evm indexer.EVMRequester
+	switch indexer.EVMType(*evmtype) {
+	case indexer.EVMTypeEthereum:
 		evm, err = ethrequest.NewEthService(ctx, rpcUrl)
 		if err != nil {
 			log.Fatal(err)
 		}
-	case index.EVMTypeOptimism:
-		evm, err = oprequest.NewEthService(ctx, rpcUrl)
+	case indexer.EVMTypeOptimism:
+		evm, err = ethrequest.NewOpService(ctx, rpcUrl)
+		if err != nil {
+			log.Fatal(err)
+		}
+	case indexer.EVMTypeCelo:
+		evm, err = ethrequest.NewCeloService(ctx, rpcUrl)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -100,7 +128,7 @@ func main() {
 
 	log.Default().Println("starting internal db service...")
 
-	d, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost)
+	d, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost, conf.DBSecret)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -128,7 +156,18 @@ func main() {
 
 	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret)
 
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, bu, fb)
+	pkBytes, err := hex.DecodeString(conf.PaymasterKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Generate ecdsa.PrivateKey from bytes
+	privateKey, err := crypto.ToECDSA(pkBytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, bu, fb, privateKey)
 
 	go func() {
 		quitAck <- api.Start(*port)

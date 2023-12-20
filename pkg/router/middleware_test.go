@@ -33,7 +33,7 @@ func TestSignatureVerification(t *testing.T) {
 
 		compactedSig := compactSignature(sig)
 
-		addr := crypto.PubkeyToAddress(k.PublicKey).Hex()
+		addr := crypto.PubkeyToAddress(k.PublicKey)
 
 		// verify the signature
 		if !verifySignature(body, addr, compactedSig) {
@@ -65,7 +65,7 @@ func TestSignatureVerification(t *testing.T) {
 
 		compactedSig := compactSignature(sig)
 
-		addr := crypto.PubkeyToAddress(k.PublicKey).Hex()
+		addr := crypto.PubkeyToAddress(k.PublicKey)
 
 		// verify the signature
 		if !verifyV2Signature(body, addr, compactedSig) {

@@ -121,7 +121,7 @@ Query params
 
 Fetch all new logs after a give fromDate with a limit
 
-`[GET] /logs/transfers/{contract_address}/{address}/new?maxDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10`
+`[GET] /logs/transfers/{contract_address}/{address}/new?fromDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10`
 
 URL params
 

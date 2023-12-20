@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 
 type ResponseType string
@@ -25,9 +27,12 @@ type Pagination struct {
 	Total  int `json:"total"`
 }
 
+// Response is the default response object
+// swagger:response defaultResponse
 type Response struct {
+	// The response type
+	// in: body
 	ResponseType ResponseType `json:"response_type"`
-	Secure       string       `json:"secure,omitempty"`
 	Object       any          `json:"object,omitempty"`
 	Array        any          `json:"array,omitempty"`
 	Meta         any          `json:"meta,omitempty"`
@@ -80,6 +85,23 @@ func StreamedBody(w http.ResponseWriter, body string) error {
 
 	fmt.Fprintf(w, "%s", body)
 	flusher.Flush()
+
+	return nil
+}
+
+func JSONRPCBody(w http.ResponseWriter, body any, meta any) error {
+
+	b, err := json.Marshal(&indexer.JsonRPCResponse{
+		Version: "2.0",
+		ID:      1,
+		Result:  body,
+	})
+	if err != nil {
+		return err
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	w.Write(b)
 
 	return nil
 }

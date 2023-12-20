@@ -14,7 +14,7 @@ type EventDB struct {
 	rdb    *sql.DB
 }
 
-// NewTransferDB creates a new DB
+// NewEventDB creates a new DB
 func NewEventDB(db, rdb *sql.DB, name string) (*EventDB, error) {
 	evdb := &EventDB{
 		suffix: name,

@@ -1,37 +1,42 @@
 package router
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 	"net/http"
 
+	"github.com/citizenwallet/indexer/internal/accounts"
 	"github.com/citizenwallet/indexer/internal/auth"
 	"github.com/citizenwallet/indexer/internal/events"
 	"github.com/citizenwallet/indexer/internal/logs"
+	"github.com/citizenwallet/indexer/internal/paymaster"
 	"github.com/citizenwallet/indexer/internal/profiles"
 	"github.com/citizenwallet/indexer/internal/push"
 	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/internal/services/firebase"
-	"github.com/citizenwallet/indexer/pkg/index"
+	"github.com/citizenwallet/indexer/internal/userop"
+	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
 type Router struct {
-	chainId     *big.Int
-	apiKey      string
-	epAddr      string
-	accFactAddr string
-	prfAddr     string
-	evm         index.EVMRequester
-	db          *db.DB
-	b           *bucket.Bucket
-	firebase    *firebase.PushService
+	chainId      *big.Int
+	apiKey       string
+	epAddr       string
+	accFactAddr  string
+	prfAddr      string
+	evm          indexer.EVMRequester
+	db           *db.DB
+	b            *bucket.Bucket
+	firebase     *firebase.PushService
+	paymasterKey *ecdsa.PrivateKey
 }
 
-func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm index.EVMRequester, db *db.DB, b *bucket.Bucket, firebase *firebase.PushService) *Router {
+func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm indexer.EVMRequester, db *db.DB, b *bucket.Bucket, firebase *firebase.PushService, pk *ecdsa.PrivateKey) *Router {
 	return &Router{
 		chainId,
 		apiKey,
@@ -42,6 +47,7 @@ func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr str
 		db,
 		b,
 		firebase,
+		pk,
 	}
 }
 
@@ -56,42 +62,92 @@ func (r *Router) Start(port int) error {
 	}
 
 	// configure middleware
+	cr.Use(middleware.RequestID)
+	cr.Use(middleware.Logger)
+
+	// configure custom middleware
 	cr.Use(OptionsMiddleware)
 	cr.Use(HealthMiddleware)
 	cr.Use(a.AuthMiddleware)
 	cr.Use(middleware.Compress(9))
 
 	// instantiate handlers
-	l := logs.NewService(r.chainId, r.db, comm)
+	l := logs.NewService(r.chainId, r.db, r.evm)
 	ev := events.NewService(r.db)
-	pr := profiles.NewService(r.b, comm)
+	pr := profiles.NewService(r.b, r.evm, comm)
 	pu := push.NewService(r.db, comm)
+	acc := accounts.NewService(r.evm, r.accFactAddr, r.db, r.paymasterKey)
+
+	pm := paymaster.NewService(r.evm, r.db)
+	uop := userop.NewService(r.evm, r.db, r.chainId)
+
+	// instantiate legacy handlers
+	legl := logs.NewLegacyService(r.chainId, r.db, comm)
+	legpr := profiles.NewLegacyService(r.b, comm)
 
 	// configure routes
-	cr.Route("/logs/transfers", func(cr chi.Router) {
-		cr.Route("/{contract_address}", func(cr chi.Router) {
-			cr.Get("/{addr}", l.Get)
-			cr.Get("/{addr}/new", l.GetNew)
+	cr.Route("/logs/v2/transfers", func(cr chi.Router) {
+		cr.Route("/{token_address}", func(cr chi.Router) {
+			cr.Get("/{acc_addr}", l.Get)
+			cr.Get("/{acc_addr}/new", l.GetNew)
 
-			cr.Post("/{addr}", withSignature(l.AddSending))
+			cr.Post("/{acc_addr}", withSignature(r.evm, l.AddSending))
 
-			cr.Patch("/{addr}/{hash}", withSignature(l.SetStatus))
+			cr.Patch("/{acc_addr}/{hash}", withSignature(r.evm, l.SetStatus))
 		})
 	})
 
 	cr.Route("/events", func(cr chi.Router) {
-		cr.Post("/", ev.AddEvent)
+		cr.Post("/", ev.AddEvent) // TODO: add auth
 	})
 
-	cr.Route("/profiles", func(cr chi.Router) {
-		cr.Put("/{addr}", withMultiPartSignature(pr.PinMultiPartProfile))
-		cr.Patch("/{addr}", withSignature(pr.PinProfile))
-		cr.Delete("/{addr}", withSignature(pr.Unpin))
+	cr.Route("/profiles/v2", func(cr chi.Router) {
+		cr.Route("/{contract_address}", func(cr chi.Router) {
+			cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, pr.PinMultiPartProfile))
+			cr.Patch("/{acc_addr}", withSignature(r.evm, pr.PinProfile))
+			cr.Delete("/{acc_addr}", withSignature(r.evm, pr.Unpin))
+		})
 	})
 
 	cr.Route("/push/{contract_address}", func(cr chi.Router) {
-		cr.Put("/", withSignature(pu.AddToken))
-		cr.Delete("/{addr}/{token}", withSignature(pu.RemoveAccountToken))
+		cr.Put("/{acc_addr}", withSignature(r.evm, pu.AddToken))
+		cr.Delete("/{acc_addr}/{token}", withSignature(r.evm, pu.RemoveAccountToken))
+	})
+
+	cr.Route("/accounts", func(cr chi.Router) {
+		cr.Get("/{acc_addr}/exists", acc.Exists)
+		cr.Route("/factory/{factory_address}", func(cr chi.Router) {
+			cr.Post("/", with1271Signature(r.evm, acc.Create))
+			cr.Patch("/sca/{acc_addr}", with1271Signature(r.evm, acc.Upgrade))
+		})
+	})
+
+	cr.Route("/rpc/{pm_address}", func(cr chi.Router) {
+		cr.Post("/", withJSONRPCRequest(map[string]http.HandlerFunc{
+			"pm_sponsorUserOperation":   pm.Sponsor,
+			"pm_ooSponsorUserOperation": pm.OOSponsor,
+			"eth_sendUserOperation":     uop.Send,
+		}))
+	})
+
+	// configure legacy routes
+	cr.Route("/logs/transfers", func(cr chi.Router) {
+		// legacy support: for versions < 1.0.37
+		cr.Route("/{contract_address}", func(cr chi.Router) {
+			cr.Get("/{addr}", legl.Get)
+			cr.Get("/{addr}/new", legl.GetNew)
+
+			cr.Post("/{addr}", withSignature(r.evm, legl.AddSending))
+
+			cr.Patch("/{addr}/{hash}", withSignature(r.evm, legl.SetStatus))
+		})
+	})
+
+	cr.Route("/profiles", func(cr chi.Router) {
+		// legacy support: for versions < 1.0.37
+		cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, legpr.PinMultiPartProfile))
+		cr.Patch("/{acc_addr}", withSignature(r.evm, legpr.PinProfile))
+		cr.Delete("/{acc_addr}", withSignature(r.evm, legpr.Unpin))
 	})
 
 	// start the server

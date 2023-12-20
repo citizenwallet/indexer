@@ -3,14 +3,14 @@ package ethrequest
 import (
 	"math/big"
 
-	"github.com/citizenwallet/indexer/pkg/index"
+	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/profile"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/simpleaccountfactory"
 	"github.com/ethereum/go-ethereum/common"
 )
 
 type Community struct {
-	evm index.EVMRequester
+	evm indexer.EVMRequester
 
 	EntryPointAddr common.Address
 
@@ -21,19 +21,19 @@ type Community struct {
 	Profile     *profile.Profile
 }
 
-func NewCommunity(evm index.EVMRequester, entryPointAddr, accountFactoryAddr, profileAddr string) (*Community, error) {
+func NewCommunity(evm indexer.EVMRequester, entryPointAddr, accountFactoryAddr, profileAddr string) (*Community, error) {
 	eaddr := common.HexToAddress(entryPointAddr)
 	addr := common.HexToAddress(accountFactoryAddr)
 	prfaddr := common.HexToAddress(profileAddr)
 
 	// instantiate account factory contract
-	acc, err := simpleaccountfactory.NewSimpleaccountfactory(addr, evm.Client())
+	acc, err := simpleaccountfactory.NewSimpleaccountfactory(addr, evm.Backend())
 	if err != nil {
 		return nil, err
 	}
 
 	// instantiate profile contract
-	prf, err := profile.NewProfile(prfaddr, evm.Client())
+	prf, err := profile.NewProfile(prfaddr, evm.Backend())
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func NewCommunity(evm index.EVMRequester, entryPointAddr, accountFactoryAddr, pr
 
 // EntryPointNextNonce returns the next nonce for the entry point address
 func (c *Community) EntryPointNextNonce() (*big.Int, error) {
-	n, err := c.evm.Client().NonceAt(c.evm.Context(), c.EntryPointAddr, nil)
+	n, err := c.evm.NonceAt(c.evm.Context(), c.EntryPointAddr, nil)
 	if err != nil {
 		return nil, err
 	}

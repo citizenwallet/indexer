@@ -127,17 +127,7 @@ func (db *TransferDB) AddTransfer(tx *indexer.Transfer) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
 	INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	ON CONFLICT(hash) DO UPDATE SET
-		tx_hash = excluded.tx_hash,
-		token_id = excluded.token_id,
-		created_at = excluded.created_at,
-		from_to_addr = excluded.from_to_addr,
-		from_addr = excluded.from_addr,
-		to_addr = excluded.to_addr,
-		nonce = excluded.nonce,
-		value = excluded.value,
-		data = excluded.data,
-		status = excluded.status
+	ON CONFLICT(hash) DO NOTHING
 	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data, tx.Status)
 
 	return err
@@ -256,6 +246,15 @@ func (db *TransferDB) SetTxHash(txHash, hash string) error {
 	return err
 }
 
+// SetFinalHash sets the hash of a transfer with no tx_hash
+func (db *TransferDB) SetFinalHash(txHash, hash string) error {
+	_, err := db.db.Exec(fmt.Sprintf(`
+	UPDATE t_transfers_%s SET hash = $1, tx_hash = $1 WHERE hash = $2 AND tx_hash = ''
+	`, db.suffix), txHash, hash)
+
+	return err
+}
+
 // SetTxHash sets the tx hash of a transfer with no tx_hash
 func (db *TransferDB) ReconcileTx(txHash, hash string, nonce int64) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
@@ -311,6 +310,28 @@ func (db *TransferDB) RemovePendingTransfer(hash string) error {
 	`, db.suffix), hash)
 
 	return err
+}
+
+// GetTransfer returns the transfer for a given hash
+func (db *TransferDB) GetTransfer(hash string) (*indexer.Transfer, error) {
+	var transfer indexer.Transfer
+	var value string
+
+	row := db.rdb.QueryRow(fmt.Sprintf(`
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
+		FROM t_transfers_%s
+		WHERE hash = $1
+		`, db.suffix), hash)
+
+	err := row.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
+	if err != nil {
+		return nil, err
+	}
+
+	transfer.Value = new(big.Int)
+	transfer.Value.SetString(value, 10)
+
+	return &transfer, nil
 }
 
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated

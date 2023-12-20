@@ -10,9 +10,9 @@ import (
 	"github.com/citizenwallet/indexer/internal/config"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
-	"github.com/citizenwallet/indexer/internal/services/oprequest"
 	"github.com/citizenwallet/indexer/internal/services/webhook"
 	"github.com/citizenwallet/indexer/pkg/index"
+	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -29,7 +29,7 @@ func main() {
 
 	rate := flag.Int("rate", 99, "rate to sync (default: 99)")
 
-	evmtype := flag.String("evm", string(index.EVMTypeEthereum), "which evm to use (default: ethereum)")
+	evmtype := flag.String("evm", string(indexer.EVMTypeEthereum), "which evm to use (default: ethereum)")
 
 	flag.Parse()
 
@@ -65,15 +65,20 @@ func main() {
 		log.Default().Println("running in standard http mode...")
 	}
 
-	var evm index.EVMRequester
-	switch index.EVMType(*evmtype) {
-	case index.EVMTypeEthereum:
+	var evm indexer.EVMRequester
+	switch indexer.EVMType(*evmtype) {
+	case indexer.EVMTypeEthereum:
 		evm, err = ethrequest.NewEthService(ctx, rpcUrl)
 		if err != nil {
 			log.Fatal(err)
 		}
-	case index.EVMTypeOptimism:
-		evm, err = oprequest.NewEthService(ctx, rpcUrl)
+	case indexer.EVMTypeOptimism:
+		evm, err = ethrequest.NewOpService(ctx, rpcUrl)
+		if err != nil {
+			log.Fatal(err)
+		}
+	case indexer.EVMTypeCelo:
+		evm, err = ethrequest.NewCeloService(ctx, rpcUrl)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -94,7 +99,7 @@ func main() {
 
 	log.Default().Println("starting internal db service...")
 
-	d, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost)
+	d, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost, conf.DBSecret)
 	if err != nil {
 		log.Fatal(err)
 	}

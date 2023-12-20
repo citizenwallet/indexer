@@ -19,7 +19,7 @@ type Service struct {
 
 // Processor is an interface that must be implemented by the consumer of the queue
 type Processor interface {
-	Process(indexer.Message) error // Process method to process a message
+	Process(indexer.Message) (indexer.Message, error) // Process method to process a message
 }
 
 // NewService function initializes a new Service with provided maximum retries, context and webhook messager.
@@ -52,13 +52,13 @@ func (s *Service) Start(p Processor) error {
 	for {
 		select {
 		case message := <-s.queue:
-			err := p.Process(message)
+			msg, err := p.Process(message)
 			if err != nil {
-				if message.RetryCount < s.maxRetries {
-					message.RetryCount++
-					s.queue <- message
+				if msg.RetryCount < s.maxRetries {
+					msg.RetryCount++
+					s.queue <- msg
 					if len(s.queue) == 1 {
-						extraWait := time.Duration(message.RetryCount) * time.Second
+						extraWait := time.Duration(msg.RetryCount) * time.Second
 						time.Sleep(extraWait)
 					}
 					continue

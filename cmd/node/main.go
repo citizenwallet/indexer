@@ -51,6 +51,8 @@ func main() {
 
 	sync := flag.Int("sync", 5, "sync from block number (default: 5)")
 
+	useropqbf := flag.Int("buffer", 10, "userop queue buffer size (default: 10)")
+
 	ws := flag.Bool("ws", false, "enable websocket")
 
 	onlyAPI := flag.Bool("onlyApi", false, "only run api service")
@@ -172,7 +174,7 @@ func main() {
 
 	op := queue.NewUserOpService(d, evm)
 
-	useropq := queue.NewService("userop", 3, 10, ctx, w)
+	useropq := queue.NewService("userop", 3, *useropqbf, ctx, w)
 
 	go func() {
 		quitAck <- useropq.Start(op)

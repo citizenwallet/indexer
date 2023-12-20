@@ -117,7 +117,7 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 		if ok && e.ErrorCode() != -32000 {
 			// If it's an RPC error and the error code is not -32000, remove the sending transfer and return the error
 			if parseErr == nil && tdb != nil && log != nil {
-				tdb.RemoveSendingTransfer(log.Hash)
+				tdb.RemoveTransfer(log.Hash)
 			}
 
 			return message, err
@@ -126,7 +126,7 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 		if !strings.Contains(e.Error(), "insufficient funds") {
 			// If the error is not about insufficient funds, remove the sending transfer and return the error
 			if parseErr == nil && tdb != nil && log != nil {
-				tdb.RemoveSendingTransfer(log.Hash)
+				tdb.SetStatus(log.Hash, string(indexer.TransferStatusFail))
 			}
 
 			return message, err
@@ -144,21 +144,19 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 	if parseErr == nil && tdb != nil && log != nil {
 		err = tdb.SetFinalHash(signedTx.Hash().Hex(), log.Hash)
 		if err != nil {
-			tdb.RemoveSendingTransfer(log.Hash)
-
-			return indexer.Message{}, nil
-		}
-
-		err = tdb.SetStatus(string(indexer.TransferStatusSending), signedTx.Hash().Hex())
-		if err != nil {
-			tdb.RemoveSendingTransfer(log.Hash)
+			tdb.RemoveTransfer(log.Hash)
+		} else {
+			err = tdb.SetStatus(string(indexer.TransferStatusPending), signedTx.Hash().Hex())
+			if err != nil {
+				tdb.RemoveTransfer(log.Hash)
+			}
 		}
 	}
 
 	err = s.evm.WaitForTx(signedTx)
 	if err != nil {
 		if parseErr == nil && tdb != nil && log != nil {
-			tdb.RemoveSendingTransfer(log.Hash)
+			tdb.RemoveTransfer(log.Hash)
 		}
 
 		return message, err

@@ -18,16 +18,23 @@ type Message struct {
 type Messager struct {
 	BaseURL   string
 	ChainName string
+
+	notify bool
 }
 
-func NewMessager(baseURL, chainName string) indexer.WebhookMessager {
+func NewMessager(baseURL, chainName string, notify bool) indexer.WebhookMessager {
 	return &Messager{
 		BaseURL:   baseURL,
 		ChainName: chainName,
+		notify:    notify,
 	}
 }
 
 func (b *Messager) Notify(ctx context.Context, message string) error {
+	if !b.notify {
+		return nil
+	}
+
 	data, err := json.Marshal(Message{Content: fmt.Sprintf("[%s] %s", b.ChainName, message)})
 	if err != nil {
 		return err
@@ -55,6 +62,10 @@ func (b *Messager) Notify(ctx context.Context, message string) error {
 }
 
 func (b *Messager) NotifyWarning(ctx context.Context, errorMessage error) error {
+	if !b.notify {
+		return nil
+	}
+
 	data, err := json.Marshal(Message{Content: fmt.Sprintf("[%s] warning: %s", b.ChainName, errorMessage.Error())})
 	if err != nil {
 		return err
@@ -82,6 +93,10 @@ func (b *Messager) NotifyWarning(ctx context.Context, errorMessage error) error 
 }
 
 func (b *Messager) NotifyError(ctx context.Context, errorMessage error) error {
+	if !b.notify {
+		return nil
+	}
+
 	data, err := json.Marshal(Message{Content: fmt.Sprintf("[%s] error: %s", b.ChainName, errorMessage.Error())})
 	if err != nil {
 		return err

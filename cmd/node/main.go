@@ -49,11 +49,13 @@ func main() {
 
 	port := flag.Int("port", 3000, "port to listen on")
 
-	sync := flag.Int("sync", 5, "sync from block number (default: 5)")
+	sync := flag.Int("sync", 1, "sync from block number (default: 1)")
 
 	useropqbf := flag.Int("buffer", 10, "userop queue buffer size (default: 10)")
 
 	ws := flag.Bool("ws", false, "enable websocket")
+
+	notify := flag.Bool("notify", true, "enable notifications")
 
 	onlyAPI := flag.Bool("onlyApi", false, "only run api service")
 
@@ -170,7 +172,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName)
+	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName, *notify)
 
 	op := queue.NewUserOpService(d, evm)
 

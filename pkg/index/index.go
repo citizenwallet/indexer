@@ -2,24 +2,13 @@ package index
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"math/big"
-	"strings"
 	"time"
 
-	"github.com/citizenwallet/indexer/internal/sc"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/pkg/indexer"
-	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc1155"
-	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc20"
-	"github.com/citizenwallet/smartcontracts/pkg/contracts/erc721"
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type ErrIndexing error
@@ -58,7 +47,31 @@ func (i *Indexer) IndexERC20From(contract string, from int64) error {
 		return err
 	}
 
-	return i.IndexFrom(ev, curr, big.NewInt(from))
+	ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
+	if !ok {
+		ptdb, err = i.db.AddPushTokenDB(ev.Contract)
+		if err != nil {
+			return err
+		}
+	}
+
+	for curr.Int64() > from {
+		t, err := i.evm.BlockTime(curr)
+		if err != nil {
+			return ErrIndexingRecoverable
+		}
+
+		blk := &block{Number: curr.Uint64(), Time: t}
+
+		err = i.EventsFromBlock(ev, blk, ptdb)
+		if err != nil {
+			return err
+		}
+
+		curr.Sub(curr, big.NewInt(1))
+	}
+
+	return nil
 }
 
 // Start starts the indexer service
@@ -75,7 +88,14 @@ func (i *Indexer) Start() error {
 		return err
 	}
 
-	return i.Process(evs, curr)
+	t, err := i.evm.BlockTime(curr)
+	if err != nil {
+		return ErrIndexingRecoverable
+	}
+
+	blk := &block{Number: curr.Uint64(), Time: t}
+
+	return i.Process(evs, blk)
 }
 
 func (e *Indexer) Close() {
@@ -103,7 +123,7 @@ func (i *Indexer) Background(syncrate int) error {
 }
 
 // Process events
-func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
+func (i *Indexer) Process(evs []*indexer.Event, blk *block) error {
 	if len(evs) == 0 {
 		// nothing to do
 		return nil
@@ -111,12 +131,22 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 
 	// iterate over events and index them
 	for _, ev := range evs {
-		err := i.Index(ev, curr)
+		var err error
+
+		ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
+		if !ok {
+			ptdb, err = i.db.AddPushTokenDB(ev.Contract)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = i.EventsFromBlock(ev, blk, ptdb)
+
 		if err == nil {
 			continue
 		}
 
-		// check if the error is recoverable
 		if err == ErrIndexingRecoverable {
 			log.Default().Println("indexer [process] recoverable error: ", err)
 			// wait a bit
@@ -128,528 +158,4 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 	}
 
 	return nil
-}
-
-func (i *Indexer) Index(ev *indexer.Event, curr *big.Int) error {
-	// check if the event last block matches the latest block of the chain
-	if ev.LastBlock >= curr.Int64() {
-		// event is up to date
-		err := i.db.EventDB.SetEventState(ev.Contract, ev.Standard, indexer.EventStateIndexed)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	// set the event state to indexing
-	err := i.db.EventDB.SetEventState(ev.Contract, ev.Standard, indexer.EventStateIndexing)
-	if err != nil {
-		return err
-	}
-
-	var contractAbi abi.ABI
-	var topics [][]common.Hash
-
-	switch ev.Standard {
-	case indexer.ERC20:
-		contractAbi, err = abi.JSON(strings.NewReader(string(erc20.Erc20MetaData.ABI)))
-		if err != nil {
-			return err
-		}
-
-		topics = [][]common.Hash{{crypto.Keccak256Hash([]byte(sc.ERC20Transfer))}}
-	case indexer.ERC721:
-		contractAbi, err = abi.JSON(strings.NewReader(string(erc721.Erc721MetaData.ABI)))
-		if err != nil {
-			return err
-		}
-
-		topics = [][]common.Hash{{crypto.Keccak256Hash([]byte(sc.ERC721Transfer))}}
-	case indexer.ERC1155:
-		contractAbi, err = abi.JSON(strings.NewReader(string(erc1155.Erc1155MetaData.ABI)))
-		if err != nil {
-			return err
-		}
-		topics = [][]common.Hash{{crypto.Keccak256Hash([]byte(sc.ERC1155TransferSingle)), crypto.Keccak256Hash([]byte(sc.ERC1155TransferBatch))}}
-	default:
-		return errors.New("unsupported token standard")
-	}
-
-	txdb, ok := i.db.GetTransferDB(ev.Contract)
-	if !ok {
-		txdb, err = i.db.AddTransferDB(ev.Contract)
-		if err != nil {
-			return err
-		}
-	}
-
-	ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
-	if !ok {
-		ptdb, err = i.db.AddPushTokenDB(ev.Contract)
-		if err != nil {
-			return err
-		}
-	}
-
-	contractAddr := common.HexToAddress(ev.Contract)
-
-	blockNum := curr.Int64()
-	// index from the latest block to the last block
-	for blockNum > ev.LastBlock {
-		startBlock := blockNum - int64(i.rate)
-		if startBlock < ev.LastBlock {
-			startBlock = ev.LastBlock + 1
-		}
-
-		query := ethereum.FilterQuery{
-			FromBlock: big.NewInt(startBlock),
-			ToBlock:   big.NewInt(blockNum),
-			Addresses: []common.Address{contractAddr},
-			Topics:    topics,
-		}
-
-		logs, err := i.evm.FilterLogs(query)
-		if err != nil {
-			return ErrIndexingRecoverable
-		}
-
-		if len(logs) > 0 {
-			txs := []*indexer.Transfer{}
-
-			// store a map of blocks by block number
-			blks := make(map[int64]uint64)
-
-			for _, l := range logs {
-				// to reduce API consumption, cache blocks by number
-
-				// check if it was already fetched
-				blk, ok := blks[int64(l.BlockNumber)]
-				if !ok {
-					// was not fetched yet, fetch it
-					blk, err = i.evm.BlockTime(big.NewInt(int64(l.BlockNumber)))
-					if err != nil {
-						return ErrIndexingRecoverable
-					}
-
-					// save in our map for later
-					blks[int64(l.BlockNumber)] = blk
-				}
-
-				blktime := time.UnixMilli(int64(blk) * 1000).UTC()
-
-				switch ev.Standard {
-				case indexer.ERC20:
-					tx, err := getERC20Log(blktime, contractAbi, l)
-					if err != nil {
-						return err
-					}
-
-					txs = append(txs, tx)
-				case indexer.ERC721:
-					tx, err := getERC721Log(blktime, contractAbi, l)
-					if err != nil {
-						return err
-					}
-
-					txs = append(txs, tx)
-				case indexer.ERC1155:
-					tx, err := getERC1155Logs(blktime, contractAbi, l)
-					if err != nil {
-						return err
-					}
-
-					txs = append(txs, tx...)
-				}
-			}
-
-			if len(txs) > 0 {
-				// filter out existing transfers
-				newTxs := []*indexer.Transfer{}
-				for _, tx := range txs {
-					// check if the transfer already exists
-					exists, err := txdb.TransferExists(tx.TxHash, tx.From, tx.To, tx.Value.String())
-					if err != nil {
-						return err
-					}
-
-					if !exists {
-						// there can be optimistic transactions already in the db
-						// attempt to find a similar transaction
-						hash, _ := txdb.TransferSimilarExists(tx.From, tx.To, tx.Value.String())
-
-						if hash != "" {
-							// there is an optimistic transaction, set its tx_hash and status
-							err = txdb.ReconcileTx(tx.TxHash, hash, tx.Nonce)
-							if err != nil {
-								return err
-							}
-
-							continue
-						}
-
-						newTxs = append(newTxs, tx)
-						continue
-					}
-
-					err = txdb.SetStatusFromHash(string(indexer.TransferStatusSuccess), tx.Hash)
-					if err != nil {
-						return err
-					}
-				}
-
-				if len(newTxs) > 0 {
-					// add the new transfers to the db
-					err = txdb.AddTransfers(newTxs)
-					if err != nil {
-						return err
-					}
-				}
-
-				go func() {
-					accTokens := map[string][]*indexer.PushToken{}
-
-					messages := []*indexer.PushMessage{}
-
-					for _, tx := range txs {
-						if tx.Status != indexer.TransferStatusSuccess {
-							continue
-						}
-
-						if _, ok = accTokens[tx.To]; !ok {
-							// get the push tokens for the recipient
-							pt, err := ptdb.GetAccountTokens(tx.To)
-							if err != nil {
-								return
-							}
-
-							if len(pt) == 0 {
-								// no push tokens for this account
-								continue
-							}
-
-							accTokens[tx.To] = pt
-						}
-
-						value := tx.ToRounded(ev.Decimals)
-
-						messages = append(messages, indexer.NewAnonymousPushMessage(accTokens[tx.To], ev.Name, fmt.Sprintf("%.2f", value), ev.Symbol))
-					}
-
-					if len(messages) > 0 {
-						for _, push := range messages {
-							badTokens, err := i.fb.Send(push)
-							if err != nil {
-								continue
-							}
-
-							if len(badTokens) > 0 {
-								// remove the bad tokens
-								for _, token := range badTokens {
-									err = ptdb.RemovePushToken(token)
-									if err != nil {
-										continue
-									}
-								}
-							}
-						}
-					}
-				}()
-			}
-		}
-
-		blockNum = startBlock - 1
-	}
-
-	err = i.db.EventDB.SetEventLastBlock(ev.Contract, ev.Standard, curr.Int64())
-	if err != nil {
-		return err
-	}
-
-	// set the event state to indexed
-	err = i.db.EventDB.SetEventState(ev.Contract, ev.Standard, indexer.EventStateIndexed)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (i *Indexer) IndexFrom(ev *indexer.Event, curr, from *big.Int) error {
-	// check if the event last block matches the latest block of the chain
-	if from.Int64() >= curr.Int64() {
-		// event is up to date
-
-		return nil
-	}
-
-	var err error
-
-	var contractAbi abi.ABI
-	var topics [][]common.Hash
-
-	switch ev.Standard {
-	case indexer.ERC20:
-		contractAbi, err = abi.JSON(strings.NewReader(string(erc20.Erc20MetaData.ABI)))
-		if err != nil {
-			return err
-		}
-
-		topics = [][]common.Hash{{crypto.Keccak256Hash([]byte(sc.ERC20Transfer))}}
-	case indexer.ERC721:
-		contractAbi, err = abi.JSON(strings.NewReader(string(erc721.Erc721MetaData.ABI)))
-		if err != nil {
-			return err
-		}
-
-		topics = [][]common.Hash{{crypto.Keccak256Hash([]byte(sc.ERC721Transfer))}}
-	case indexer.ERC1155:
-		contractAbi, err = abi.JSON(strings.NewReader(string(erc1155.Erc1155MetaData.ABI)))
-		if err != nil {
-			return err
-		}
-		topics = [][]common.Hash{{crypto.Keccak256Hash([]byte(sc.ERC1155TransferSingle)), crypto.Keccak256Hash([]byte(sc.ERC1155TransferBatch))}}
-	default:
-		return errors.New("unsupported token standard")
-	}
-
-	txdb, ok := i.db.GetTransferDB(ev.Contract)
-	if !ok {
-		txdb, err = i.db.AddTransferDB(ev.Contract)
-		if err != nil {
-			return err
-		}
-	}
-
-	contractAddr := common.HexToAddress(ev.Contract)
-
-	blockNum := curr.Int64()
-	// index from the latest block to the last block
-	for blockNum > from.Int64() {
-		startBlock := blockNum - int64(i.rate)
-		if startBlock < from.Int64() {
-			startBlock = from.Int64()
-		}
-
-		query := ethereum.FilterQuery{
-			FromBlock: big.NewInt(startBlock),
-			ToBlock:   big.NewInt(blockNum),
-			Addresses: []common.Address{contractAddr},
-			Topics:    topics,
-		}
-
-		logs, err := i.evm.FilterLogs(query)
-		if err != nil {
-			return ErrIndexingRecoverable
-		}
-
-		if len(logs) > 0 {
-			txs := []*indexer.Transfer{}
-
-			// store a map of blocks by block number
-			blks := make(map[int64]uint64)
-
-			for _, l := range logs {
-				// to reduce API consumption, cache blocks by number
-
-				// check if it was already fetched
-				blk, ok := blks[int64(l.BlockNumber)]
-				if !ok {
-					// was not fetched yet, fetch it
-					blk, err = i.evm.BlockTime(big.NewInt(int64(l.BlockNumber)))
-					if err != nil {
-						return ErrIndexingRecoverable
-					}
-
-					// save in our map for later
-					blks[int64(l.BlockNumber)] = blk
-				}
-
-				blktime := time.UnixMilli(int64(blk) * 1000).UTC()
-
-				switch ev.Standard {
-				case indexer.ERC20:
-					tx, err := getERC20Log(blktime, contractAbi, l)
-					if err != nil {
-						return err
-					}
-
-					txs = append(txs, tx)
-				case indexer.ERC721:
-					tx, err := getERC721Log(blktime, contractAbi, l)
-					if err != nil {
-						return err
-					}
-
-					txs = append(txs, tx)
-				case indexer.ERC1155:
-					tx, err := getERC1155Logs(blktime, contractAbi, l)
-					if err != nil {
-						return err
-					}
-
-					txs = append(txs, tx...)
-				}
-			}
-
-			if len(txs) > 0 {
-				// filter out existing transfers
-				newTxs := []*indexer.Transfer{}
-				for _, tx := range txs {
-					// check if the transfer already exists
-					exists, err := txdb.TransferExists(tx.TxHash, tx.From, tx.To, tx.Value.String())
-					if err != nil {
-						return err
-					}
-
-					if !exists {
-						// there can be optimistic transactions already in the db
-						// attempt to find a similar transaction
-						hash, _ := txdb.TransferSimilarExists(tx.From, tx.To, tx.Value.String())
-
-						if hash != "" {
-							// there is an optimistic transaction, set its tx_hash and status
-							err = txdb.ReconcileTx(tx.TxHash, hash, tx.Nonce)
-							if err != nil {
-								return err
-							}
-
-							continue
-						}
-
-						newTxs = append(newTxs, tx)
-						continue
-					}
-
-					err = txdb.SetStatusFromHash(string(indexer.TransferStatusSuccess), tx.Hash)
-					if err != nil {
-						return err
-					}
-				}
-
-				if len(newTxs) > 0 {
-					// add the new transfers to the db
-					err = txdb.AddTransfers(newTxs)
-					if err != nil {
-						return err
-					}
-				}
-			}
-		}
-
-		blockNum = startBlock - 1
-	}
-
-	return nil
-}
-
-func getERC20Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexer.Transfer, error) {
-	var trsf erc20.Erc20Transfer
-
-	err := contractAbi.UnpackIntoInterface(&trsf, "Transfer", log.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	trsf.From = common.HexToAddress(log.Topics[1].Hex())
-	trsf.To = common.HexToAddress(log.Topics[2].Hex())
-
-	return &indexer.Transfer{
-		Hash:      log.TxHash.Hex(),
-		TxHash:    log.TxHash.Hex(),
-		TokenID:   0,
-		CreatedAt: blktime,
-		From:      trsf.From.Hex(),
-		To:        trsf.To.Hex(),
-		Nonce:     int64(trsf.Raw.Index),
-		Value:     trsf.Value,
-		Status:    indexer.TransferStatusSuccess,
-	}, nil
-}
-
-func getERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexer.Transfer, error) {
-	var trsf erc721.Erc721Transfer
-
-	err := contractAbi.UnpackIntoInterface(&trsf, "Transfer", log.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	trsf.From = common.HexToAddress(log.Topics[1].Hex())
-	trsf.To = common.HexToAddress(log.Topics[2].Hex())
-
-	return &indexer.Transfer{
-		Hash:      log.TxHash.Hex(),
-		TxHash:    log.TxHash.Hex(),
-		TokenID:   trsf.TokenId.Int64(),
-		CreatedAt: blktime,
-		From:      trsf.From.Hex(),
-		To:        trsf.To.Hex(),
-		Nonce:     int64(trsf.Raw.Index),
-		Value:     common.Big1,
-		Status:    indexer.TransferStatusSuccess,
-	}, nil
-}
-
-func getERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*indexer.Transfer, error) {
-	evsig := log.Topics[0].Hex()
-
-	txs := []*indexer.Transfer{}
-
-	switch evsig {
-	case crypto.Keccak256Hash([]byte(sc.ERC1155TransferSingle)).Hex():
-		var trsf erc1155.Erc1155TransferSingle
-
-		err := contractAbi.UnpackIntoInterface(&trsf, "TransferSingle", log.Data)
-		if err != nil {
-			return nil, err
-		}
-
-		trsf.From = common.HexToAddress(log.Topics[2].Hex())
-		trsf.To = common.HexToAddress(log.Topics[3].Hex())
-
-		txs = append(txs, &indexer.Transfer{
-			Hash:      log.TxHash.Hex(),
-			TxHash:    log.TxHash.Hex(),
-			TokenID:   trsf.Id.Int64(),
-			CreatedAt: blktime,
-			From:      trsf.From.Hex(),
-			To:        trsf.To.Hex(),
-			Nonce:     int64(trsf.Raw.Index),
-			Value:     trsf.Value,
-			Status:    indexer.TransferStatusSuccess,
-		})
-	case crypto.Keccak256Hash([]byte(sc.ERC1155TransferBatch)).Hex():
-		var trsf erc1155.Erc1155TransferBatch
-
-		err := contractAbi.UnpackIntoInterface(&trsf, "TransferBatch", log.Data)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(trsf.Ids) != len(trsf.Values) {
-			return nil, errors.New("ids and values length mismatch")
-		}
-
-		trsf.From = common.HexToAddress(log.Topics[2].Hex())
-		trsf.To = common.HexToAddress(log.Topics[3].Hex())
-
-		for i, id := range trsf.Ids {
-			txs = append(txs, &indexer.Transfer{
-				Hash:      log.TxHash.Hex(),
-				TxHash:    log.TxHash.Hex(),
-				TokenID:   id.Int64(),
-				CreatedAt: blktime,
-				From:      trsf.From.Hex(),
-				To:        trsf.To.Hex(),
-				Nonce:     int64(trsf.Raw.Index),
-				Value:     trsf.Values[i],
-				Status:    indexer.TransferStatusSuccess,
-			})
-		}
-	default:
-		return nil, errors.New("unknown function signature")
-	}
-
-	return txs, nil
 }

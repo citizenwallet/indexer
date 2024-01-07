@@ -27,6 +27,8 @@ func main() {
 
 	ws := flag.Bool("ws", false, "enable websocket")
 
+	notify := flag.Bool("notify", false, "enable notifications")
+
 	rate := flag.Int("rate", 99, "rate to sync (default: 99)")
 
 	evmtype := flag.String("evm", string(indexer.EVMTypeEthereum), "which evm to use (default: ethereum)")
@@ -115,7 +117,7 @@ func main() {
 	}
 	defer i.Close()
 
-	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName)
+	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName, *notify)
 
 	go func() {
 		w.Notify(ctx, fmt.Sprintf("⚙️ indexing started for contract: %s", *contract))

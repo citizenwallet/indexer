@@ -25,12 +25,23 @@ func (i *Indexer) EventsFromBlock(ev *indexer.Event, blk *block, ptdb *db.PushTo
 
 	contractAddr := common.HexToAddress(ev.Contract)
 
-	fromBlock := ev.LastBlock
+	// Calculate the starting block for the filter query
+	// It's the last block that was indexed plus one
+	fromBlock := ev.LastBlock + 1
+
+	// Calculate the number of blocks to index
+	// It's the current block number minus the starting block
 	blocksToIndex := blk.Number - uint64(fromBlock)
+
+	// If the number of blocks to index is greater than the rate limit,
+	// adjust the starting block to only index the latest blocks within the rate limit
 	if blocksToIndex > uint64(i.rate) {
 		fromBlock = int64(blk.Number) - int64(i.rate)
 	}
 
+	// Create a new filter query for the Ethereum logs
+	// The query will start from the calculated block and end at the current block
+	// It will only include logs from the specified contract address and with the specified topics
 	query := ethereum.FilterQuery{
 		FromBlock: big.NewInt(fromBlock),
 		ToBlock:   big.NewInt(int64(blk.Number)),

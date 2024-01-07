@@ -86,6 +86,8 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 		// If the parsing is successful, this is an ERC20 transfer
 		// Create a new transfer log
 		log = &indexer.Transfer{
+			Hash:      signedTx.Hash().Hex(),
+			TxHash:    signedTx.Hash().Hex(),
 			TokenID:   0,
 			CreatedAt: time.Now(),
 			From:      userop.Sender.Hex(),
@@ -99,7 +101,7 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 		log.FromTo = log.CombineFromTo()
 
 		// Generate a temporary hash for the transfer
-		log.GenerateTempHash(txm.ChainId.Int64())
+		// log.GenerateTempHash(txm.ChainId.Int64())
 
 		// Get the transfer database for the destination address
 		tdb, ok = s.db.TransferDB[s.db.TransferName(dest.Hex())]
@@ -142,14 +144,9 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 	}
 
 	if parseErr == nil && tdb != nil && log != nil {
-		err = tdb.SetFinalHash(signedTx.Hash().Hex(), log.Hash)
+		err = tdb.SetStatus(string(indexer.TransferStatusPending), signedTx.Hash().Hex())
 		if err != nil {
 			tdb.RemoveTransfer(log.Hash)
-		} else {
-			err = tdb.SetStatus(string(indexer.TransferStatusPending), signedTx.Hash().Hex())
-			if err != nil {
-				tdb.RemoveTransfer(log.Hash)
-			}
 		}
 	}
 

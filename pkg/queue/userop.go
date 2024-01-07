@@ -100,9 +100,6 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 		// Combine the From and To addresses into a single string
 		log.FromTo = log.CombineFromTo()
 
-		// Generate a temporary hash for the transfer
-		// log.GenerateTempHash(txm.ChainId.Int64())
-
 		// Get the transfer database for the destination address
 		tdb, ok = s.db.TransferDB[s.db.TransferName(dest.Hex())]
 		if ok {

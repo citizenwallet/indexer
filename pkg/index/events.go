@@ -11,24 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-func (i *Indexer) EventsFromBlock(ev *indexer.Event, curr *big.Int) error {
-	// check if the event last block matches the latest block of the chain
-	if ev.LastBlock >= curr.Int64() {
-		// event is up to date
-		err := i.db.EventDB.SetEventState(ev.Contract, ev.Standard, indexer.EventStateIndexed)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	// set the event state to indexing
-	err := i.db.EventDB.SetEventState(ev.Contract, ev.Standard, indexer.EventStateIndexing)
-	if err != nil {
-		return err
-	}
-
+func (i *Indexer) EventsFromBlock(ev *indexer.Event, blk *block, ptdb *db.PushTokenDB) error {
 	contractAbi, err := GetContractABI(ev.Standard)
 	topics := GetContractTopics(ev.Standard)
 
@@ -40,58 +23,47 @@ func (i *Indexer) EventsFromBlock(ev *indexer.Event, curr *big.Int) error {
 		}
 	}
 
-	ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
-	if !ok {
-		ptdb, err = i.db.AddPushTokenDB(ev.Contract)
+	contractAddr := common.HexToAddress(ev.Contract)
+
+	fromBlock := ev.LastBlock
+	blocksToIndex := blk.Number - uint64(fromBlock)
+	if blocksToIndex > uint64(i.rate) {
+		fromBlock = int64(blk.Number) - int64(i.rate)
+	}
+
+	query := ethereum.FilterQuery{
+		FromBlock: big.NewInt(fromBlock),
+		ToBlock:   big.NewInt(int64(blk.Number)),
+		Addresses: []common.Address{contractAddr},
+		Topics:    topics,
+	}
+
+	logs, err := i.evm.FilterLogs(query)
+	if err != nil {
+		return ErrIndexingRecoverable
+	}
+
+	if len(logs) > 0 {
+		txs, err := parseTransfersFromLogs(i.evm, ev, contractAbi, blk, logs)
 		if err != nil {
 			return err
 		}
-	}
 
-	contractAddr := common.HexToAddress(ev.Contract)
-
-	blockNum := curr.Int64()
-	// index from the latest block to the last block
-	for blockNum > ev.LastBlock {
-		startBlock := blockNum - int64(i.rate)
-		if startBlock < ev.LastBlock {
-			startBlock = ev.LastBlock + 1
-		}
-
-		query := ethereum.FilterQuery{
-			FromBlock: big.NewInt(startBlock),
-			ToBlock:   big.NewInt(blockNum),
-			Addresses: []common.Address{contractAddr},
-			Topics:    topics,
-		}
-
-		logs, err := i.evm.FilterLogs(query)
-		if err != nil {
-			return ErrIndexingRecoverable
-		}
-
-		if len(logs) > 0 {
-			txs, err := parseTransfersFromLogs(i.evm, ev, contractAbi, logs)
+		if len(txs) > 0 {
+			err = reconcileTransfersWithDB(txdb, txs)
 			if err != nil {
 				return err
 			}
 
-			if len(txs) > 0 {
-				err = reconcileTransfersWithDB(txdb, txs)
-				if err != nil {
-					return err
-				}
-
-				// TODO: move to a queue in a separate service
+			// TODO: move to a queue in a separate service
+			if ptdb != nil && i.fb != nil {
 				go sendPushForTxs(ptdb, i.fb, ev, txs)
-				// end TODO
 			}
+			// end TODO
 		}
-
-		blockNum = startBlock - 1
 	}
 
-	err = i.db.EventDB.SetEventLastBlock(ev.Contract, ev.Standard, curr.Int64())
+	err = i.db.EventDB.SetEventLastBlock(ev.Contract, ev.Standard, int64(blk.Number))
 	if err != nil {
 		return err
 	}
@@ -153,65 +125,4 @@ func sendPushForTxs(ptdb *db.PushTokenDB, fb *firebase.PushService, ev *indexer.
 			}
 		}
 	}
-}
-
-func (i *Indexer) AllEventsFromBlock(ev *indexer.Event, curr, from *big.Int) error {
-	// check if the event last block matches the latest block of the chain
-	if from.Int64() >= curr.Int64() {
-		// event is up to date
-
-		return nil
-	}
-
-	contractAbi, err := GetContractABI(ev.Standard)
-	topics := GetContractTopics(ev.Standard)
-
-	txdb, ok := i.db.GetTransferDB(ev.Contract)
-	if !ok {
-		txdb, err = i.db.AddTransferDB(ev.Contract)
-		if err != nil {
-			return err
-		}
-	}
-
-	contractAddr := common.HexToAddress(ev.Contract)
-
-	blockNum := curr.Int64()
-	// index from the latest block to the last block
-	for blockNum > from.Int64() {
-		startBlock := blockNum - int64(i.rate)
-		if startBlock < from.Int64() {
-			startBlock = from.Int64()
-		}
-
-		query := ethereum.FilterQuery{
-			FromBlock: big.NewInt(startBlock),
-			ToBlock:   big.NewInt(blockNum),
-			Addresses: []common.Address{contractAddr},
-			Topics:    topics,
-		}
-
-		logs, err := i.evm.FilterLogs(query)
-		if err != nil {
-			return ErrIndexingRecoverable
-		}
-
-		if len(logs) > 0 {
-			txs, err := parseTransfersFromLogs(i.evm, ev, contractAbi, logs)
-			if err != nil {
-				return err
-			}
-
-			if len(txs) > 0 {
-				err = reconcileTransfersWithDB(txdb, txs)
-				if err != nil {
-					return err
-				}
-			}
-		}
-
-		blockNum = startBlock - 1
-	}
-
-	return nil
 }

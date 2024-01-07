@@ -2,7 +2,6 @@ package index
 
 import (
 	"errors"
-	"math/big"
 	"time"
 
 	"github.com/citizenwallet/indexer/internal/sc"
@@ -64,7 +63,7 @@ func parseERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*ind
 	}, nil
 }
 
-func parseERC1155Log(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*indexer.Transfer, error) {
+func parseERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*indexer.Transfer, error) {
 	evsig := log.Topics[0].Hex()
 
 	txs := []*indexer.Transfer{}
@@ -127,36 +126,17 @@ func parseERC1155Log(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*
 	return txs, nil
 }
 
-// parseLogs function takes an EVM requester, an event, a contract ABI, and a slice of logs,
+// parseTransfersFromLogs function takes an EVM requester, an event, a contract ABI, and a slice of logs,
 // and returns a slice of transfers and an error if any.
-func parseTransfersFromLogs(evm indexer.EVMRequester, ev *indexer.Event, contractAbi *abi.ABI, logs []types.Log) ([]*indexer.Transfer, error) {
+func parseTransfersFromLogs(evm indexer.EVMRequester, ev *indexer.Event, contractAbi *abi.ABI, blk *block, logs []types.Log) ([]*indexer.Transfer, error) {
 	// Initialize an empty slice of transfers
 	txs := []*indexer.Transfer{}
 
-	// Initialize a map to store blocks by block number
-	blks := make(map[int64]uint64)
+	// Convert the block time to a time.Time value
+	blktime := time.UnixMilli(int64(blk.Time) * 1000).UTC()
 
 	// Iterate over the logs
 	for _, l := range logs {
-		// To reduce API consumption, cache blocks by number
-
-		// Check if the block was already fetched
-		blk, ok := blks[int64(l.BlockNumber)]
-		if !ok {
-			// If the block was not fetched yet, fetch it
-			blk, err := evm.BlockTime(big.NewInt(int64(l.BlockNumber)))
-			if err != nil {
-				// If there's an error, return the transfers and a recoverable error
-				return txs, ErrIndexingRecoverable
-			}
-
-			// Save the block in our map for later
-			blks[int64(l.BlockNumber)] = blk
-		}
-
-		// Convert the block time to a time.Time value
-		blktime := time.UnixMilli(int64(blk) * 1000).UTC()
-
 		// Switch on the standard of the event
 		switch ev.Standard {
 		case indexer.ERC20:
@@ -181,7 +161,7 @@ func parseTransfersFromLogs(evm indexer.EVMRequester, ev *indexer.Event, contrac
 			txs = append(txs, tx)
 		case indexer.ERC1155:
 			// If the event is an ERC1155 event, parse the log as an ERC1155 log
-			tx, err := parseERC1155Log(blktime, *contractAbi, l)
+			tx, err := parseERC1155Logs(blktime, *contractAbi, l)
 			if err != nil {
 				// If there's an error, return the transfers and the error
 				return txs, err

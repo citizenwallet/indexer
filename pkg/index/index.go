@@ -47,7 +47,31 @@ func (i *Indexer) IndexERC20From(contract string, from int64) error {
 		return err
 	}
 
-	return i.AllEventsFromBlock(ev, curr, big.NewInt(from))
+	ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
+	if !ok {
+		ptdb, err = i.db.AddPushTokenDB(ev.Contract)
+		if err != nil {
+			return err
+		}
+	}
+
+	for curr.Int64() > from {
+		t, err := i.evm.BlockTime(curr)
+		if err != nil {
+			return ErrIndexingRecoverable
+		}
+
+		blk := &block{Number: curr.Uint64(), Time: t}
+
+		err = i.EventsFromBlock(ev, blk, ptdb)
+		if err != nil {
+			return err
+		}
+
+		curr.Sub(curr, big.NewInt(1))
+	}
+
+	return nil
 }
 
 // Start starts the indexer service
@@ -64,7 +88,14 @@ func (i *Indexer) Start() error {
 		return err
 	}
 
-	return i.Process(evs, curr)
+	t, err := i.evm.BlockTime(curr)
+	if err != nil {
+		return ErrIndexingRecoverable
+	}
+
+	blk := &block{Number: curr.Uint64(), Time: t}
+
+	return i.Process(evs, blk)
 }
 
 func (e *Indexer) Close() {
@@ -92,7 +123,7 @@ func (i *Indexer) Background(syncrate int) error {
 }
 
 // Process events
-func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
+func (i *Indexer) Process(evs []*indexer.Event, blk *block) error {
 	if len(evs) == 0 {
 		// nothing to do
 		return nil
@@ -100,12 +131,22 @@ func (i *Indexer) Process(evs []*indexer.Event, curr *big.Int) error {
 
 	// iterate over events and index them
 	for _, ev := range evs {
-		err := i.EventsFromBlock(ev, curr)
+		var err error
+
+		ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
+		if !ok {
+			ptdb, err = i.db.AddPushTokenDB(ev.Contract)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = i.EventsFromBlock(ev, blk, ptdb)
+
 		if err == nil {
 			continue
 		}
 
-		// check if the error is recoverable
 		if err == ErrIndexingRecoverable {
 			log.Default().Println("indexer [process] recoverable error: ", err)
 			// wait a bit

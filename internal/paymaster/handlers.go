@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strconv"
 	"time"
 
 	comm "github.com/citizenwallet/indexer/internal/common"
@@ -429,10 +430,18 @@ func (s *Service) OOSponsor(w http.ResponseWriter, r *http.Request) {
 		case 3:
 			v, ok := param.(int)
 			if !ok {
-				amount = 10
+				vstr, ok := param.(string)
+				if !ok {
+					amount = 10
+				} else {
+					amount, err = strconv.Atoi(vstr)
+					if err != nil {
+						amount = 10
+					}
+				}
+			} else {
+				amount = v
 			}
-
-			amount = v
 		}
 	}
 

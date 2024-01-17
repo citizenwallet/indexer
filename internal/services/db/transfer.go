@@ -155,9 +155,9 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 				to_addr = excluded.to_addr,
 				nonce = excluded.nonce,
 				value = excluded.value,
-				data = excluded.data,
+				data = COALESCE(excluded.data, t_transfers_%s.data),
 				status = excluded.status
-			`, db.suffix), t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
+			`, db.suffix, db.suffix), t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
 		if err != nil {
 			return dbtx.Rollback()
 		}

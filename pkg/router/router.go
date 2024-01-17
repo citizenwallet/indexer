@@ -71,6 +71,7 @@ func (r *Router) Start(port int) error {
 	// configure custom middleware
 	cr.Use(OptionsMiddleware)
 	cr.Use(HealthMiddleware)
+	cr.Use(RequestSizeLimitMiddleware(10 << 20)) // Limit request bodies to 10MB
 	cr.Use(a.AuthMiddleware)
 	cr.Use(middleware.Compress(9))
 

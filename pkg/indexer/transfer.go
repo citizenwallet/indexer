@@ -2,7 +2,9 @@ package indexer
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -49,8 +51,31 @@ type Transfer struct {
 	To        string         `json:"to"`
 	Nonce     int64          `json:"nonce"`
 	Value     *big.Int       `json:"value"`
-	Data      []byte         `json:"data"`
+	Data      *TransferData  `json:"data"`
 	Status    TransferStatus `json:"status"`
+}
+
+type TransferData struct {
+	Description string `json:"description"`
+}
+
+// TransferData implements the sql.Scanner interface
+func (td *TransferData) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("Type assertion .([]byte) failed.")
+	}
+
+	if len(b) == 0 {
+		return nil
+	}
+
+	return json.Unmarshal(b, td)
+}
+
+// TransferData implements the driver.Valuer interface
+func (td TransferData) Value() (driver.Value, error) {
+	return json.Marshal(td)
 }
 
 func (t *Transfer) CombineFromTo() string {

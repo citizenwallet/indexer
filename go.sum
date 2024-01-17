@@ -54,10 +54,6 @@ github.com/cespare/xxhash/v2 v2.2.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XL
 github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
-github.com/citizenwallet/smartcontracts v0.0.59 h1:+ZtjQDnCMnhrrJ1Pw6z9/yAxPMhWdZs5gIQNVlDD0Q8=
-github.com/citizenwallet/smartcontracts v0.0.59/go.mod h1:kygwLWzbd6YHNkXCQJ55L1+7q+Am0XH25VqyVXDBf3c=
-github.com/citizenwallet/smartcontracts v0.0.62-0.20231212225647-fcff23b8b909 h1:81nstkUQ+/Y3BFZ9Sh2ZWPcJK333tr2QR0+BHVLZ+CM=
-github.com/citizenwallet/smartcontracts v0.0.62-0.20231212225647-fcff23b8b909/go.mod h1:kygwLWzbd6YHNkXCQJ55L1+7q+Am0XH25VqyVXDBf3c=
 github.com/citizenwallet/smartcontracts v0.0.62 h1:XmAe+J3sXte36I0J4/nr6fuoYepHwF6gsRS+LdSyugc=
 github.com/citizenwallet/smartcontracts v0.0.62/go.mod h1:kygwLWzbd6YHNkXCQJ55L1+7q+Am0XH25VqyVXDBf3c=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=

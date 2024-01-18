@@ -66,6 +66,12 @@ func (i *Indexer) EventsFromBlock(ev *indexer.Event, blk *block, ptdb *db.PushTo
 				return err
 			}
 
+			// enrich with data already in the db (e.g. tx_hash, data)
+			txs, err = txdb.UpdateTransfersWithDB(txs)
+			if err != nil {
+				return err
+			}
+
 			// TODO: move to a queue in a separate service
 			if ptdb != nil && i.fb != nil {
 				go sendPushForTxs(ptdb, i.fb, ev, txs)
@@ -115,7 +121,7 @@ func sendPushForTxs(ptdb *db.PushTokenDB, fb *firebase.PushService, ev *indexer.
 
 		value := tx.ToRounded(ev.Decimals)
 
-		messages = append(messages, indexer.NewAnonymousPushMessage(accTokens[tx.To], ev.Name, fmt.Sprintf("%.2f", value), ev.Symbol))
+		messages = append(messages, indexer.NewAnonymousPushMessage(accTokens[tx.To], ev.Name, fmt.Sprintf("%.2f", value), ev.Symbol, tx.Data))
 	}
 
 	if len(messages) > 0 {

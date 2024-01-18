@@ -112,3 +112,19 @@ func (t *Transfer) ToRounded(decimals int64) float64 {
 
 	return result
 }
+
+// Update updates the transfer using the given transfer
+func (t *Transfer) Update(tx *Transfer) {
+	// update all fields
+	t.Hash = tx.Hash
+	t.TxHash = tx.TxHash
+	t.TokenID = tx.TokenID
+	t.CreatedAt = tx.CreatedAt
+	t.FromTo = tx.FromTo
+	t.From = tx.From
+	t.To = tx.To
+	t.Nonce = tx.Nonce
+	t.Value = tx.Value
+	t.Data = tx.Data
+	t.Status = tx.Status
+}

@@ -469,3 +469,65 @@ func (db *TransferDB) GetProcessingTransfers(limit int) ([]*indexer.Transfer, er
 
 	return transfers, nil
 }
+
+// UpdateTransfersWithDB returns the transfers with data updated from the db
+func (db *TransferDB) UpdateTransfersWithDB(txs []*indexer.Transfer) ([]*indexer.Transfer, error) {
+	if len(txs) == 0 {
+		return txs, nil
+	}
+
+	// Convert the transfer hashes to a comma-separated string
+	hashStr := ""
+	for _, tx := range txs {
+		// if last item, don't add a trailing comma
+		if tx == txs[len(txs)-1] {
+			hashStr += fmt.Sprintf("('%s')", tx.Hash)
+			continue
+		}
+
+		hashStr += fmt.Sprintf("('%s'),", tx.Hash)
+	}
+
+	rows, err := db.rdb.Query(fmt.Sprintf(`
+		SELECT tx.hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
+		FROM t_transfers_%s tx
+		JOIN (values %s) as b(hash)
+		ON tx.hash = b.hash;
+		`, db.suffix, hashStr))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return txs, nil
+		}
+
+		return nil, err
+	}
+	defer rows.Close()
+
+	mtxs := map[string]*indexer.Transfer{}
+	for _, tx := range txs {
+		mtxs[tx.Hash] = tx
+	}
+
+	for rows.Next() {
+		var transfer indexer.Transfer
+		var value string
+
+		err := rows.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
+		if err != nil {
+			return nil, err
+		}
+
+		transfer.Value = new(big.Int)
+		transfer.Value.SetString(value, 10)
+
+		// check if exists
+		if _, ok := mtxs[transfer.Hash]; !ok {
+			continue
+		}
+
+		// update the transfer
+		mtxs[transfer.Hash].Update(&transfer)
+	}
+
+	return txs, nil
+}

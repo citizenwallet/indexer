@@ -52,7 +52,7 @@ func (db *TransferDB) CreateTransferTable() error {
 		to_addr text NOT NULL,
 		nonce integer NOT NULL,
 		value text NOT NULL,
-		data bytea DEFAULT '{}',
+		data jsonb DEFAULT NULL,
 		status text NOT NULL DEFAULT 'success'
 	);
 	`, db.suffix))

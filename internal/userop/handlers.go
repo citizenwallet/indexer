@@ -75,6 +75,7 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 
 	var userop indexer.UserOp
 	var epAddr string
+	var txdata *indexer.TransferData
 
 	for i, param := range params {
 		switch i {
@@ -103,6 +104,24 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 			}
 
 			epAddr = v
+		case 2:
+			v, ok := param.(map[string]any)
+			if !ok {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			b, err := json.Marshal(v)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			err = json.Unmarshal(b, &txdata)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 		}
 	}
 
@@ -214,7 +233,7 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create a new message
-	message := indexer.NewTxMessage(addr, entryPoint, data, s.chainId, userop)
+	message := indexer.NewTxMessage(addr, entryPoint, data, s.chainId, userop, txdata)
 
 	// Enqueue the message
 	s.useropq.Enqueue(*message)

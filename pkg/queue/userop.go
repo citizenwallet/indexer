@@ -79,6 +79,11 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 	var log *indexer.Transfer
 
 	userop := txm.UserOp
+	txdata, ok := txm.ExtraData.(*indexer.TransferData)
+	if !ok {
+		// if it's invalid, set it to nil to avoid errors and corrupted json
+		txdata = nil
+	}
 
 	// Parse the ERC20 transfer from the call data
 	dest, toaddr, amount, parseErr := comm.ParseERC20Transfer(userop.CallData)
@@ -94,6 +99,7 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 			To:        toaddr.Hex(),
 			Nonce:     userop.Nonce.Int64(),
 			Value:     amount,
+			Data:      txdata,
 			Status:    indexer.TransferStatusSending,
 		}
 

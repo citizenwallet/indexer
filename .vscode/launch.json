@@ -10,7 +10,35 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/node/main.go",
-      "args": ["-env", "../../.env", "-rate", "99", "-sync", "1"]
+      "args": [
+        "-env",
+        "../../.env",
+        "-rate",
+        "99",
+        "-sync",
+        "1",
+        "-fbpath",
+        "../../firebase.json"
+      ]
+    },
+    {
+      "name": "Launch Node [CELO]",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/node/main.go",
+      "args": [
+        "-env",
+        "../../.env",
+        "-rate",
+        "99",
+        "-sync",
+        "1",
+        "-fbpath",
+        "../../firebase.json",
+        "-evm",
+        "celo"
+      ]
     },
     {
       "name": "Launch API",

@@ -2,13 +2,17 @@ version: '3.8'
 
 services:
   db:
-    image: postgres:15.3-alpine
+    container_name: db
+    build:
+      context: .
+      dockerfile: ./.docker/db/Dockerfile
     environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_DB: cw
+      POSTGRES_PASSWORD: cw-pass-local
+      POSTGRES_USER: cw
     volumes:
       - ./data:/var/lib/postgresql/data
-      - ./config/postgresql.conf:/usr/local/share/postgresql/postgresql.conf
     ports:
       - "5432:5432"
+    restart: on-failure
+    healthcheck:
+      test: "exit 0"

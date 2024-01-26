@@ -38,3 +38,4 @@ services:
 
 networks:
   cwnet:
+    name: cwnet

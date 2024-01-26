@@ -51,7 +51,7 @@ func main() {
 
 	sync := flag.Int("sync", 1, "sync from block number (default: 1)")
 
-	useropqbf := flag.Int("buffer", 10, "userop queue buffer size (default: 10)")
+	useropqbf := flag.Int("buffer", 100, "userop queue buffer size (default: 100)")
 
 	ws := flag.Bool("ws", false, "enable websocket")
 
@@ -59,7 +59,7 @@ func main() {
 
 	onlyAPI := flag.Bool("onlyApi", false, "only run api service")
 
-	rate := flag.Int("rate", 99, "rate to sync (default: 99)")
+	rate := flag.Int("rate", 10, "rate to sync (default: 10)")
 
 	evmtype := flag.String("evm", string(indexer.EVMTypeEthereum), "which evm to use (default: ethereum)")
 

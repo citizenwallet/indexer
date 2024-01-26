@@ -11,8 +11,30 @@ services:
       POSTGRES_USER: cw
     volumes:
       - ./data:/var/lib/postgresql/data
+    networks:
+      cwnet:
+        aliases:
+          - cwdb
     ports:
       - "5432:5432"
     restart: on-failure
     healthcheck:
       test: "exit 0"
+  node:
+    container_name: node
+    build:
+      context: .
+      dockerfile: ./.docker/node/Dockerfile
+    networks:
+      cwnet:
+        aliases:
+          - cwnode
+    ports:
+      - "3000:3000"
+    restart: on-failure
+    healthcheck:
+      test: "exit 0"
+
+
+networks:
+  cwnet:

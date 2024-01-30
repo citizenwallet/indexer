@@ -45,7 +45,7 @@ import (
 func main() {
 	log.Default().Println("launching indexer...")
 
-	env := flag.String("env", "", "path to .env file")
+	env := flag.String("env", ".env", "path to .env file")
 
 	port := flag.Int("port", 3000, "port to listen on")
 

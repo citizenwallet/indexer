@@ -12,7 +12,7 @@ require (
 	github.com/getsentry/sentry-go v0.22.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/joho/godotenv v1.5.1
-	github.com/lib/pq v1.10.9
+	github.com/mattn/go-sqlite3 v1.14.20
 	github.com/sethvargo/go-envconfig v0.9.0
 	github.com/swaggo/swag v1.16.2
 	golang.org/x/image v0.9.0

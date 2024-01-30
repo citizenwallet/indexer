@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	dbBaseFolder   = ".cw"
+	dbBaseFolder   = "data"
 	dbConfigString = "cache=private&_journal=WAL&mode=rwc"
 )
 
@@ -32,7 +32,7 @@ type DB struct {
 
 // NewDB instantiates a new DB
 func NewDB(chainID *big.Int, username, password, name, host, rhost, secret string) (*DB, error) {
-	basePath := storage.GetUserHomeDir()
+	basePath := "."
 	folderPath := fmt.Sprintf("%s/%s", basePath, dbBaseFolder)
 	path := fmt.Sprintf("%s/cw.db", folderPath)
 

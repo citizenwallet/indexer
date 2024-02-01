@@ -30,6 +30,61 @@ func NewService(chainID *big.Int, db *db.DB, evm indexer.EVMRequester) *Service 
 	}
 }
 
+func (s *Service) GetAll(w http.ResponseWriter, r *http.Request) {
+	// parse contract address from url params
+	contractAddr := chi.URLParam(r, "token_address")
+
+	// parse maxDate from url query
+	maxDateq, _ := url.QueryUnescape(r.URL.Query().Get("maxDate"))
+
+	t, err := time.Parse(time.RFC3339, maxDateq)
+	if err != nil {
+		t = time.Now()
+	}
+	maxDate := t.UTC()
+
+	// parse pagination params from url query
+	limitq := r.URL.Query().Get("limit")
+	offsetq := r.URL.Query().Get("offset")
+
+	limit, err := strconv.Atoi(limitq)
+	if err != nil {
+		limit = 20
+	}
+
+	offset, err := strconv.Atoi(offsetq)
+	if err != nil {
+		offset = 0
+	}
+
+	tokenIdq := r.URL.Query().Get("tokenId")
+	tokenId, err := strconv.Atoi(tokenIdq)
+	if err != nil {
+		tokenId = 0
+	}
+
+	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	// get logs from db
+	logs, err := tdb.GetAllPaginatedTransfers(int64(tokenId), maxDate, limit, offset)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// TODO: remove legacy support
+	total := offset + 10
+
+	err = com.BodyMultiple(w, logs, com.Pagination{Limit: limit, Offset: offset, Total: total})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
 // Get godoc
 //
 //		@Summary		Fetch transfer logs

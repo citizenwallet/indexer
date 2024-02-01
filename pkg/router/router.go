@@ -92,6 +92,7 @@ func (r *Router) Start(port int) error {
 	// configure routes
 	cr.Route("/logs/v2/transfers", func(cr chi.Router) {
 		cr.Route("/{token_address}", func(cr chi.Router) {
+			cr.Get("/", l.GetAll)
 			cr.Get("/{acc_addr}", l.Get)
 			cr.Get("/{acc_addr}/new", l.GetNew)
 

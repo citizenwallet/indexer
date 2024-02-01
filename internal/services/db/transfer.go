@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -51,7 +52,7 @@ func (db *TransferDB) CreateTransferTable() error {
 		to_addr text NOT NULL,
 		nonce integer NOT NULL,
 		value text NOT NULL,
-		data blob DEFAULT NULL,
+		data jsonb DEFAULT NULL,
 		status text NOT NULL DEFAULT 'success'
 	);
 	`, db.suffix))
@@ -124,8 +125,9 @@ func (db *TransferDB) AddTransfer(tx *indexer.Transfer) error {
 
 	// insert transfer on conflict update
 	_, err := db.db.Exec(fmt.Sprintf(`
-		INSERT OR IGNORE INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	ON CONFLICT(hash) DO NOTHING
 	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data, tx.Status)
 
 	return err
@@ -141,38 +143,23 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 
 	for _, t := range tx {
 		// insert transfer on conflict update
-		result, err := dbtx.Exec(fmt.Sprintf(`
-			INSERT OR IGNORE INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+		_, err := dbtx.Exec(fmt.Sprintf(`
+			INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		`, db.suffix), t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
+			ON CONFLICT(hash) DO UPDATE SET
+				tx_hash = excluded.tx_hash,
+				token_id = excluded.token_id,
+				created_at = excluded.created_at,
+				from_to_addr = excluded.from_to_addr,
+				from_addr = excluded.from_addr,
+				to_addr = excluded.to_addr,
+				nonce = excluded.nonce,
+				value = excluded.value,
+				data = COALESCE(excluded.data, t_transfers_%s.data),
+				status = excluded.status
+			`, db.suffix, db.suffix), t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
 		if err != nil {
 			return dbtx.Rollback()
-		}
-
-		rows, err := result.RowsAffected()
-		if err != nil {
-			return dbtx.Rollback()
-		}
-
-		if rows == 0 {
-			_, err = dbtx.Exec(fmt.Sprintf(`
-				UPDATE t_transfers_%s 
-				SET 
-					tx_hash = $1,
-					token_id = $2,
-					created_at = $3,
-					from_to_addr = $4,
-					from_addr = $5,
-					to_addr = $6,
-					nonce = $7,
-					value = $8,
-					data = COALESCE($9, data),
-					status = $10
-				WHERE hash = $11
-			`, db.suffix), t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status, t.Hash)
-			if err != nil {
-				return dbtx.Rollback()
-			}
 		}
 	}
 
@@ -195,6 +182,57 @@ func (db *TransferDB) SetStatusFromHash(status, hash string) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
 	UPDATE t_transfers_%s SET status = $1 WHERE hash = $2 AND status != 'success'
 	`, db.suffix), status, hash)
+
+	return err
+}
+
+// ReconcileTxHash updates transfers to ensure that there are no duplicates
+func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
+	// check if there are multiple transfers with the same tx_hash
+	var count int
+	row := db.rdb.QueryRow(fmt.Sprintf(`
+	SELECT COUNT(*) FROM t_transfers_%s WHERE tx_hash = $1
+	`, db.suffix), tx.TxHash)
+
+	err := row.Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		// should be impossible
+		return errors.New("no transfer with tx_hash")
+	}
+
+	// handle the scenario with multiple transfers with the same tx_hash
+
+	// we can assume that the reason there are multiple transfers with the same tx_hash
+	// is because one was inserted due to indexing, meaning it is confirmed
+
+	// delete all transfers with a given tx_hash
+	_, err = db.db.Exec(fmt.Sprintf(`
+	DELETE FROM t_transfers_%s WHERE tx_hash = $1
+	`, db.suffix), tx.TxHash)
+	if err != nil {
+		return err
+	}
+
+	// insert the confirmed transfer
+	_, err = db.db.Exec(fmt.Sprintf(`
+	INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'success')
+	ON CONFLICT (hash) DO UPDATE SET 
+		tx_hash = EXCLUDED.tx_hash,
+		token_id = EXCLUDED.token_id,
+		created_at = EXCLUDED.created_at,
+		from_to_addr = EXCLUDED.from_to_addr,
+		from_addr = EXCLUDED.from_addr,
+		to_addr = EXCLUDED.to_addr,
+		nonce = EXCLUDED.nonce,
+		value = EXCLUDED.value,
+		data = EXCLUDED.data,
+		status = EXCLUDED.status;
+	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data)
 
 	return err
 }
@@ -303,6 +341,44 @@ func (db *TransferDB) GetTransfer(hash string) (*indexer.Transfer, error) {
 	transfer.Value.SetString(value, 10)
 
 	return &transfer, nil
+}
+
+// GetAllPaginatedTransfers returns the transfers paginated
+func (db *TransferDB) GetAllPaginatedTransfers(tokenId int64, maxDate time.Time, limit, offset int) ([]*indexer.Transfer, error) {
+	transfers := []*indexer.Transfer{}
+
+	rows, err := db.rdb.Query(fmt.Sprintf(`
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
+		FROM t_transfers_%s
+		WHERE created_at <= $1 AND token_id = $2
+		ORDER BY created_at DESC
+		LIMIT $7 OFFSET $8
+		`, db.suffix), maxDate, tokenId, limit, offset)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return transfers, nil
+		}
+
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var transfer indexer.Transfer
+		var value string
+
+		err := rows.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
+		if err != nil {
+			return nil, err
+		}
+
+		transfer.Value = new(big.Int)
+		transfer.Value.SetString(value, 10)
+
+		transfers = append(transfers, &transfer)
+	}
+
+	return transfers, nil
 }
 
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated
@@ -440,17 +516,21 @@ func (db *TransferDB) UpdateTransfersWithDB(txs []*indexer.Transfer) ([]*indexer
 
 	// Convert the transfer hashes to a comma-separated string
 	hashStr := ""
-	for i, tx := range txs {
-		if i != 0 {
-			hashStr += ", "
+	for _, tx := range txs {
+		// if last item, don't add a trailing comma
+		if tx == txs[len(txs)-1] {
+			hashStr += fmt.Sprintf("('%s')", tx.Hash)
+			continue
 		}
-		hashStr += fmt.Sprintf("'%s'", tx.Hash)
+
+		hashStr += fmt.Sprintf("('%s'),", tx.Hash)
 	}
 
 	rows, err := db.rdb.Query(fmt.Sprintf(`
 		SELECT tx.hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s tx
-		WHERE tx.hash IN (%s);
+		JOIN (values %s) as b(hash)
+		ON tx.hash = b.hash;
 		`, db.suffix, hashStr))
 	if err != nil {
 		if err == sql.ErrNoRows {

@@ -211,7 +211,7 @@ func (db *EventDB) AddEvent(contract string, state indexer.EventState, startBlk,
         start_block = excluded.start_block,
         last_block = excluded.last_block,
         name = excluded.name,
-        symbol = excluded.symbol
+        symbol = excluded.symbol,
 		decimals = excluded.decimals
     `, db.suffix), contract, state, t, t, startBlk, lastBlk, std, name, symbol, decimals)
 

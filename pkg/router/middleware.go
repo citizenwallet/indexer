@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	comm "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/account"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -300,29 +301,82 @@ func with1271Signature(evm indexer.EVMRequester, h http.HandlerFunc) http.Handle
 }
 
 // withJSONRPCRequest is a middleware that handles a JSON RPC request
-func withJSONRPCRequest(hmap map[string]http.HandlerFunc) http.HandlerFunc {
+func withJSONRPCRequest(hmap map[string]indexer.RPCHandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		// parse request
-		var req indexer.JsonRPCRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var raw json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		defer r.Body.Close()
 
-		// check if the method is available
-		h, ok := hmap[req.Method]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
+		var singleReq indexer.JsonRPCRequest
+		var multiReq []indexer.JsonRPCRequest
+
+		// parse request
+		err := json.Unmarshal(raw, &singleReq)
+		if err == nil {
+			multiReq = append(multiReq, singleReq)
+		} else {
+			err = json.Unmarshal(raw, &multiReq)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+		defer r.Body.Close()
+
+		if len(multiReq) == 1 {
+			req := multiReq[0]
+
+			// check if the method is available
+			h, ok := hmap[req.Method]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+
+			r.Body = io.NopCloser(strings.NewReader(string(req.Params)))
+			r.ContentLength = int64(len([]byte(req.Params)))
+
+			body, statusCode := h(r)
+			if statusCode != 200 {
+				w.WriteHeader(statusCode)
+				return
+			}
+
+			comm.JSONRPCBody(w, req.ID, body, nil)
 			return
 		}
 
-		r.Body = io.NopCloser(strings.NewReader(string(req.Params)))
-		r.ContentLength = int64(len([]byte(req.Params)))
+		// handle multi requests
+		var ids []int
+		var bodies []any
 
-		h(w, r)
-		return
+		for _, req := range multiReq {
+
+			// check if the method is available
+			h, ok := hmap[req.Method]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+
+			r.Body = io.NopCloser(strings.NewReader(string(req.Params)))
+			r.ContentLength = int64(len([]byte(req.Params)))
+
+			body, statusCode := h(r)
+			if statusCode != 200 {
+				w.WriteHeader(statusCode)
+				return
+			}
+
+			ids = append(ids, req.ID)
+			bodies = append(bodies, body)
+		}
+
+		comm.JSONRPCMultiBody(w, ids, bodies, nil)
 	})
 }
 

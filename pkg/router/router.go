@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/citizenwallet/indexer/internal/accounts"
-	"github.com/citizenwallet/indexer/internal/auth"
+	"github.com/citizenwallet/indexer/internal/chain"
 	"github.com/citizenwallet/indexer/internal/events"
 	"github.com/citizenwallet/indexer/internal/logs"
 	"github.com/citizenwallet/indexer/internal/paymaster"
@@ -58,7 +58,6 @@ func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr str
 func (r *Router) Start(port int) error {
 	cr := chi.NewRouter()
 
-	a := auth.New(r.apiKey)
 	comm, err := ethrequest.NewCommunity(r.evm, r.epAddr, r.accFactAddr, r.prfAddr)
 	if err != nil {
 		return err
@@ -72,7 +71,6 @@ func (r *Router) Start(port int) error {
 	cr.Use(OptionsMiddleware)
 	cr.Use(HealthMiddleware)
 	cr.Use(RequestSizeLimitMiddleware(10 << 20)) // Limit request bodies to 10MB
-	cr.Use(a.AuthMiddleware)
 	cr.Use(middleware.Compress(9))
 
 	// instantiate handlers
@@ -84,6 +82,7 @@ func (r *Router) Start(port int) error {
 
 	pm := paymaster.NewService(r.evm, r.db)
 	uop := userop.NewService(r.evm, r.db, r.useropq, r.chainId)
+	ch := chain.NewService(r.evm, r.chainId)
 
 	// instantiate legacy handlers
 	legl := logs.NewLegacyService(r.chainId, r.db, comm)
@@ -128,10 +127,11 @@ func (r *Router) Start(port int) error {
 	})
 
 	cr.Route("/rpc/{pm_address}", func(cr chi.Router) {
-		cr.Post("/", withJSONRPCRequest(map[string]http.HandlerFunc{
+		cr.Post("/", withJSONRPCRequest(map[string]indexer.RPCHandlerFunc{
 			"pm_sponsorUserOperation":   pm.Sponsor,
 			"pm_ooSponsorUserOperation": pm.OOSponsor,
 			"eth_sendUserOperation":     uop.Send,
+			"eth_chainId":               ch.ChainId,
 		}))
 	})
 

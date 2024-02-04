@@ -32,3 +32,5 @@ firebase.json
 
 # debug files
 __debug_bin*
+
+.idea

@@ -24,28 +24,37 @@ type DB struct {
 	PushTokenDB map[string]*PushTokenDB
 }
 
-// NewDB instantiates a new DB
-func NewDB(chainID *big.Int, username, password, name, host, rhost, secret string) (*DB, error) {
+func NewDBConnection(username, password, name, host, rhost string) (db, rdb *sql.DB, err error) {
 	connStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, host)
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	if db, err = sql.Open("postgres", connStr); err != nil {
+		err = fmt.Errorf("failed to connect to database: %w", err)
+		return
 	}
 
-	err = db.Ping()
-	if err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+	if err = db.Ping(); err != nil {
+		err = fmt.Errorf("failed to ping database: %w", err)
+		return
 	}
 
 	rconnStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, rhost)
-	rdb, err := sql.Open("postgres", rconnStr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	if rdb, err = sql.Open("postgres", rconnStr); err != nil {
+		err = fmt.Errorf("failed to connect to database: %w", err)
+		return
 	}
 
-	err = rdb.Ping()
+	if err = rdb.Ping(); err != nil {
+		err = fmt.Errorf("failed to ping database: %w", err)
+		return
+	}
+
+	return
+}
+
+// NewDB instantiates a new DB
+func NewDB(chainID *big.Int, username, password, name, host, rhost, secret string) (*DB, error) {
+	db, rdb, err := NewDBConnection(username, password, name, host, rhost)
 	if err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+		return nil, err
 	}
 
 	evname := chainID.String()

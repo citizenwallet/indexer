@@ -37,11 +37,11 @@ func (db *EventDB) CloseR() error {
 // createEventsTable creates a table to store events in the given db
 func (db *EventDB) CreateEventsTable(suffix string) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
-	CREATE TABLE t_events_%s(
+	CREATE TABLE IF NOT EXISTS t_events_%s(
 		contract text NOT NULL,
 		state text NOT NULL,
-		created_at timestamp NOT NULL,
-		updated_at timestamp NOT NULL,
+		created_at timestamp NOT NULL DEFAULT current_timestamp,
+		updated_at timestamp NOT NULL DEFAULT current_timestamp,
 		start_block integer NOT NULL,
 		last_block integer NOT NULL,
 		standard text NOT NULL,
@@ -58,21 +58,21 @@ func (db *EventDB) CreateEventsTable(suffix string) error {
 // createEventsTableIndexes creates the indexes for events in the given db
 func (db *EventDB) CreateEventsTableIndexes(suffix string) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
-    CREATE INDEX idx_events_%s_state ON t_events_%s (state);
+    CREATE INDEX IF NOT EXISTS idx_events_%s_state ON t_events_%s (state);
     `, suffix, suffix))
 	if err != nil {
 		return err
 	}
 
 	_, err = db.db.Exec(fmt.Sprintf(`
-    CREATE INDEX idx_events_%s_address_signature ON t_events_%s (contract, standard);
+    CREATE INDEX IF NOT EXISTS idx_events_%s_address_signature ON t_events_%s (contract, standard);
     `, suffix, suffix))
 	if err != nil {
 		return err
 	}
 
 	_, err = db.db.Exec(fmt.Sprintf(`
-    CREATE INDEX idx_events_%s_address_signature_state ON t_events_%s (contract, standard, state);
+    CREATE INDEX IF NOT EXISTS idx_events_%s_address_signature_state ON t_events_%s (contract, standard, state);
     `, suffix, suffix))
 	if err != nil {
 		return err

@@ -42,11 +42,11 @@ func (db *TransferDB) CloseR() error {
 // from_to_addr is an optimization column to allow searching for transfers withouth using OR
 func (db *TransferDB) CreateTransferTable() error {
 	_, err := db.db.Exec(fmt.Sprintf(`
-	CREATE TABLE t_transfers_%s(
+	CREATE TABLE IF NOT EXISTS t_transfers_%s(
 		hash TEXT NOT NULL PRIMARY KEY,
 		tx_hash text NOT NULL,
 		token_id integer NOT NULL,
-		created_at timestamp NOT NULL,
+		created_at timestamp NOT NULL DEFAULT current_timestamp,
 		from_to_addr text NOT NULL,
 		from_addr text NOT NULL,
 		to_addr text NOT NULL,
@@ -65,7 +65,7 @@ func (db *TransferDB) CreateTransferTableIndexes() error {
 	suffix := common.ShortenName(db.suffix, 6)
 
 	_, err := db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_%s_tx_hash ON t_transfers_%s (tx_hash);
+	CREATE INDEX IF NOT EXISTS idx_transfers_%s_tx_hash ON t_transfers_%s (tx_hash);
 	`, suffix, db.suffix))
 	if err != nil {
 		return err
@@ -73,14 +73,14 @@ func (db *TransferDB) CreateTransferTableIndexes() error {
 
 	// filtering by address
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_%s_to_addr ON t_transfers_%s (to_addr);
+	CREATE INDEX IF NOT EXISTS idx_transfers_%s_to_addr ON t_transfers_%s (to_addr);
 	`, suffix, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_%s_from_addr ON t_transfers_%s (from_addr);
+	CREATE INDEX IF NOT EXISTS idx_transfers_%s_from_addr ON t_transfers_%s (from_addr);
 	`, suffix, db.suffix))
 	if err != nil {
 		return err
@@ -88,14 +88,14 @@ func (db *TransferDB) CreateTransferTableIndexes() error {
 
 	// single-token queries
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_%s_date_from_token_id_from_addr_simple ON t_transfers_%s (created_at, token_id, from_addr);
+	CREATE INDEX IF NOT EXISTS idx_transfers_%s_date_from_token_id_from_addr_simple ON t_transfers_%s (created_at, token_id, from_addr);
 	`, suffix, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_%s_date_from_token_id_to_addr_simple ON t_transfers_%s (created_at, token_id, to_addr);
+	CREATE INDEX IF NOT EXISTS idx_transfers_%s_date_from_token_id_to_addr_simple ON t_transfers_%s (created_at, token_id, to_addr);
 	`, suffix, db.suffix))
 	if err != nil {
 		return err
@@ -103,7 +103,7 @@ func (db *TransferDB) CreateTransferTableIndexes() error {
 
 	// sending queries
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_transfers_%s_status_date_from_tx_hash ON t_transfers_%s (status, created_at, tx_hash);
+	CREATE INDEX IF NOT EXISTS idx_transfers_%s_status_date_from_tx_hash ON t_transfers_%s (status, created_at, tx_hash);
 	`, suffix, db.suffix))
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func (db *TransferDB) CreateTransferTableIndexes() error {
 
 	// finding optimistic transactions
 	_, err = db.db.Exec(fmt.Sprintf(`
-		CREATE INDEX idx_transfers_%s_to_addr_from_addr_value ON t_transfers_%s (to_addr, from_addr, value);
+		CREATE INDEX IF NOT EXISTS idx_transfers_%s_to_addr_from_addr_value ON t_transfers_%s (to_addr, from_addr, value);
 		`, suffix, db.suffix))
 	if err != nil {
 		return err

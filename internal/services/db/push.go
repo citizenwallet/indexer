@@ -38,11 +38,11 @@ func (db *PushTokenDB) CloseR() error {
 // CreatePushTable creates a table to store push tokens in the given db
 func (db *PushTokenDB) CreatePushTable() error {
 	_, err := db.db.Exec(fmt.Sprintf(`
-	CREATE TABLE t_push_token_%s(
+	CREATE TABLE IF NOT EXISTS t_push_token_%s(
 		token TEXT NOT NULL,
 		account text NOT NULL,
-		created_at timestamp NOT NULL,
-		updated_at timestamp NOT NULL,
+		created_at timestamp NOT NULL DEFAULT current_timestamp,
+		updated_at timestamp NOT NULL DEFAULT current_timestamp,
 		UNIQUE (token, account)
 	);
 	`, db.suffix))
@@ -56,14 +56,14 @@ func (db *PushTokenDB) CreatePushTableIndexes() error {
 
 	// fetch tokens for an address
 	_, err := db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_push_%s_account ON t_push_token_%s (account);
+	CREATE INDEX IF NOT EXISTS idx_push_%s_account ON t_push_token_%s (account);
 	`, suffix, db.suffix))
 	if err != nil {
 		return err
 	}
 
 	_, err = db.db.Exec(fmt.Sprintf(`
-	CREATE INDEX idx_push_%s_token_account ON t_push_token_%s (token, account);
+	CREATE INDEX IF NOT EXISTS idx_push_%s_token_account ON t_push_token_%s (token, account);
 	`, suffix, db.suffix))
 	if err != nil {
 		return err

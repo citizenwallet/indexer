@@ -1,0 +1,8 @@
+ curl http://localhost:3000/logs/v2/transfers/0x58a2993a618afee681de23decbcf535a58a080ba/0x32A629dE3fb4549EB2B204d37eb9C8CFb0b9AdCf \
+-H "Authorization: Bearer x"
+
+ curl http://localhost:3000/gov/0xeedbe595ddcfb5afdba7e16b3a36b885cba81a4a \
+-H "Authorization: Bearer x"
+
+ curl http://localhost:3000/gov/0xeedbe595ddcfb5afdba7e16b3a36b885cba81a4a/props \
+-H "Authorization: Bearer x"

@@ -63,7 +63,7 @@ func main() {
 
 	evmtype := flag.String("evm", string(indexer.EVMTypeEthereum), "which evm to use (default: ethereum)")
 
-	fbpath := flag.String("fbpath", "firebase.json", "path to firebase credentials")
+	fbpath := flag.String("fbpath", "", "path to firebase credentials")
 
 	flag.Parse()
 
@@ -133,11 +133,11 @@ func main() {
 
 	log.Default().Println("starting internal db service...")
 
-	d, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost, conf.DBSecret)
+	db, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost, conf.DBSecret)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer d.Close()
+	defer db.Close()
 
 	quitAck := make(chan error)
 
@@ -146,7 +146,7 @@ func main() {
 	if !*onlyAPI {
 		log.Default().Println("starting index service...")
 
-		i, err := index.New(*rate, chid, d, evm, fb)
+		i, err := index.New(*rate, chid, db, evm, fb)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -174,7 +174,7 @@ func main() {
 
 	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName, *notify)
 
-	op := queue.NewUserOpService(d, evm)
+	op := queue.NewUserOpService(db, evm)
 
 	useropq := queue.NewService("userop", 3, *useropqbf, ctx, w)
 
@@ -182,7 +182,7 @@ func main() {
 		quitAck <- useropq.Start(op)
 	}()
 
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, useropq, bu, fb, privateKey)
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, db, useropq, bu, fb, privateKey)
 
 	go func() {
 		quitAck <- api.Start(*port)

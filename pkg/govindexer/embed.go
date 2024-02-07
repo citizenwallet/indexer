@@ -1,4 +1,4 @@
-package govindex
+package govindexer
 
 import "embed"
 

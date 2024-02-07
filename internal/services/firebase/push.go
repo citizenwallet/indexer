@@ -16,6 +16,12 @@ type PushService struct {
 }
 
 func NewPushService(ctx context.Context, path string) *PushService {
+	if path == "" {
+		return &PushService{
+			ctx:       ctx,
+			Messaging: nil,
+		}
+	}
 	opt := option.WithCredentialsFile(path)
 	app, err := firebase.NewApp(context.Background(), nil, opt)
 	if err != nil {
@@ -35,6 +41,11 @@ func NewPushService(ctx context.Context, path string) *PushService {
 
 // Send sends a push notification to the given tokens. Returns the tokens to be removed.
 func (s *PushService) Send(push *indexer.PushMessage) ([]string, error) {
+	if s.Messaging == nil {
+		log.Default().Println("WARN: PushService.Send call, service uninitialized")
+		return nil, nil
+	}
+
 	tokens := []string{}
 
 	for _, t := range push.Tokens {

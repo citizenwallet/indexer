@@ -3,6 +3,7 @@ package router
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"github.com/citizenwallet/indexer/internal/governance"
 	"math/big"
 	"net/http"
 
@@ -152,6 +153,13 @@ func (r *Router) Start(port int) error {
 		cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, legpr.PinMultiPartProfile))
 		cr.Patch("/{acc_addr}", withSignature(r.evm, legpr.PinProfile))
 		cr.Delete("/{acc_addr}", withSignature(r.evm, legpr.Unpin))
+	})
+
+	gov := governance.NewService(nil) // TODO: db
+
+	cr.Route("/gov", func(cr chi.Router) {
+		cr.Get("/{contract_address}", gov.GetGov)                // TODO: add auth
+		cr.Get("/{contract_address}/props", gov.GetGovProposals) // TODO: add auth
 	})
 
 	// start the server

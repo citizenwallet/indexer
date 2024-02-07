@@ -6,6 +6,7 @@ import (
 	"context"
 	"github.com/citizenwallet/indexer/internal/services/db/govdb"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
+	"github.com/citizenwallet/indexer/pkg/govindexer"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"math/big"
@@ -35,7 +36,7 @@ func TestIndexerBasics(t *testing.T) {
 	latest, err := evm.LatestBlock()
 	require.NoError(t, err)
 
-	g := Governor{
+	g := govindexer.Governor{
 		Contract:    govMumbaiAddr.String(),
 		State:       "",
 		CreatedAt:   time.Time{},

@@ -1,4 +1,4 @@
-package govindex
+package govindexer
 
 import (
 	"github.com/stretchr/testify/require"

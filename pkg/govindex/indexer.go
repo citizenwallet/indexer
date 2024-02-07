@@ -2,6 +2,7 @@ package govindex
 
 import (
 	"github.com/citizenwallet/indexer/internal/services/db/govdb"
+	"github.com/citizenwallet/indexer/pkg/govindexer"
 	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/ethereum/go-ethereum"
@@ -49,7 +50,7 @@ func (i *Indexer) makeIndexFilter(contractAddrHex string, lastBlock, targetBlock
 		targetBlock = fromBlock + i.rate - 1 // filter block range is inclusive
 	}
 
-	topics := makeGovTopics()
+	topics := govindexer.makeGovTopics()
 
 	query = ethereum.FilterQuery{
 		FromBlock: big.NewInt(fromBlock),
@@ -63,9 +64,9 @@ func (i *Indexer) makeIndexFilter(contractAddrHex string, lastBlock, targetBlock
 
 func (i *Indexer) makeHandlers() map[common.Hash]func(l types.Log) error {
 	return map[common.Hash]func(l types.Log) error{
-		GovVotingDelaySetId:       i.handleVotingDelaySet,
-		GovVotingPeriodSetId:      i.handleVotingPeriodSet,
-		GovProposalThresholdSetId: i.handleProposalThresholdSet,
+		govindexer.GovVotingDelaySetId:       i.handleVotingDelaySet,
+		govindexer.GovVotingPeriodSetId:      i.handleVotingPeriodSet,
+		govindexer.GovProposalThresholdSetId: i.handleProposalThresholdSet,
 	}
 }
 
@@ -81,7 +82,7 @@ func (i *Indexer) handleProposalThresholdSet(l types.Log) error {
 	return nil
 }
 
-func (i *Indexer) fromBlock(gv *Governor, targetBlock uint64) error {
+func (i *Indexer) fromBlock(gv *govindexer.Governor, targetBlock uint64) error {
 
 	query := i.makeIndexFilter(gv.Contract, gv.LastBlock, int64(targetBlock))
 	logs, err := i.evm.FilterLogs(query)

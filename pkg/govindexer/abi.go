@@ -1,4 +1,4 @@
-package govindex
+package govindexer
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	// GovVotingDelaySet emitted at gov contract creation
+	// GovVotingDelaySet emitted at governance contract creation
 	GovVotingDelaySet       = "VotingDelaySet(uint256,uint256)"
 	GovVotingPeriodSet      = "VotingPeriodSet(uint256,uint256)"
 	GovProposalThresholdSet = "ProposalThresholdSet(uint256,uint256)"

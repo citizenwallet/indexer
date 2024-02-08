@@ -203,7 +203,7 @@ func (db *EventDB) AddEvent(contract string, state indexer.EventState, startBlk,
 	t := time.Now()
 
 	result, err := db.db.Exec(fmt.Sprintf(`
-    INSERT INTO t_events_%s (contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol, decimals)
+    INSERT OR IGNORE INTO t_events_%s (contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol, decimals)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     `, db.suffix), contract, state, t, t, startBlk, lastBlk, std, name, symbol, decimals)
 	if err != nil {

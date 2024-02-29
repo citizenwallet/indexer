@@ -202,18 +202,38 @@ func (db *EventDB) SetEventLastBlock(contract string, standard indexer.Standard,
 func (db *EventDB) AddEvent(contract string, state indexer.EventState, startBlk, lastBlk int64, std indexer.Standard, name, symbol string, decimals int64) error {
 	t := time.Now()
 
-	_, err := db.db.Exec(fmt.Sprintf(`
+	result, err := db.db.Exec(fmt.Sprintf(`
     INSERT INTO t_events_%s (contract, state, created_at, updated_at, start_block, last_block, standard, name, symbol, decimals)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    ON CONFLICT(contract, standard) DO UPDATE SET
-        state = excluded.state,
-        updated_at = excluded.updated_at,
-        start_block = excluded.start_block,
-        last_block = excluded.last_block,
-        name = excluded.name,
-        symbol = excluded.symbol,
-		decimals = excluded.decimals
     `, db.suffix), contract, state, t, t, startBlk, lastBlk, std, name, symbol, decimals)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		_, err := db.db.Exec(fmt.Sprintf(`
+			UPDATE t_events_%s 
+			SET
+				state = $2,
+				created_at = $3,
+				updated_at = $4,
+				start_block = $5,
+				last_block = $6,
+				standard = $7,
+				name = $8,
+				symbol = $9,
+				decimals = $10
+			WHERE contract = $1 AND standard = $7
+		`, db.suffix), contract, state, t, t, startBlk, lastBlk, std, name, symbol, decimals)
+		if err != nil {
+			return err
+		}
+	}
 
 	return err
 }

@@ -32,3 +32,6 @@ firebase.json
 
 # debug files
 __debug_bin*
+
+# ui files
+_ui

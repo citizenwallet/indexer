@@ -77,12 +77,28 @@ func (db *PushTokenDB) AddToken(p *indexer.PushToken) error {
 	now := time.Now().UTC()
 
 	// insert transfer on conflict update
-	_, err := db.db.Exec(fmt.Sprintf(`
-	INSERT INTO t_push_token_%s (token, account, created_at, updated_at)
+	result, err := db.db.Exec(fmt.Sprintf(`
+	INSERT OR IGNORE INTO t_push_token_%s (token, account, created_at, updated_at)
 	VALUES ($1, $2, $3, $4)
-	ON CONFLICT(token, account) DO UPDATE SET
-		updated_at = excluded.updated_at
 	`, db.suffix), p.Token, p.Account, now, now)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		_, err := db.db.Exec(fmt.Sprintf(`
+			UPDATE t_push_token_%s SET updated_at = $1
+			WHERE token = $2 AND account = $3
+		`, db.suffix), now, p.Token, p.Account)
+		if err != nil {
+			return err
+		}
+	}
 
 	return err
 }

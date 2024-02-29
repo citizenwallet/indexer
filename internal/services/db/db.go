@@ -9,7 +9,13 @@ import (
 
 	"database/sql"
 
-	_ "github.com/lib/pq"
+	"github.com/citizenwallet/indexer/internal/storage"
+	_ "github.com/mattn/go-sqlite3"
+)
+
+const (
+	dbBaseFolder   = "data"
+	dbConfigString = "cache=private&_journal=WAL&mode=rwc"
 )
 
 type DB struct {
@@ -26,36 +32,56 @@ type DB struct {
 
 // NewDB instantiates a new DB
 func NewDB(chainID *big.Int, username, password, name, host, rhost, secret string) (*DB, error) {
-	connStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, host)
-	db, err := sql.Open("postgres", connStr)
+	basePath := "."
+	folderPath := fmt.Sprintf("%s/%s", basePath, dbBaseFolder)
+	path := fmt.Sprintf("%s/cw.db", folderPath)
+
+	// check if directory exists
+	if !storage.Exists(folderPath) {
+		err := storage.CreateDir(folderPath)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// check if db exists before opening, since we use rwc mode
+	// exists := storage.Exists(path)
+
+	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?%s", path, dbConfigString))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
+
+	// connStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, host)
+	// db, err := sql.Open("postgres", connStr)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to connect to database: %w", err)
+	// }
 
 	err = db.Ping()
 	if err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	rconnStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, rhost)
-	rdb, err := sql.Open("postgres", rconnStr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
+	// rconnStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, rhost)
+	// rdb, err := sql.Open("postgres", rconnStr)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to connect to database: %w", err)
+	// }
 
-	err = rdb.Ping()
-	if err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
+	// err = rdb.Ping()
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to ping database: %w", err)
+	// }
 
 	evname := chainID.String()
 
-	eventDB, err := NewEventDB(db, rdb, evname)
+	eventDB, err := NewEventDB(db, db, evname)
 	if err != nil {
 		return nil, err
 	}
 
-	sponsorDB, err := NewSponsorDB(db, rdb, evname, secret)
+	sponsorDB, err := NewSponsorDB(db, db, evname, secret)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +89,7 @@ func NewDB(chainID *big.Int, username, password, name, host, rhost, secret strin
 	d := &DB{
 		chainID:   chainID,
 		db:        db,
-		rdb:       rdb,
+		rdb:       db,
 		EventDB:   eventDB,
 		SponsorDB: sponsorDB,
 	}
@@ -120,7 +146,7 @@ func NewDB(chainID *big.Int, username, password, name, host, rhost, secret strin
 		name := d.TransferName(ev.Contract)
 		log.Default().Println("creating transfer db for: ", name)
 
-		txdb[name], err = NewTransferDB(db, rdb, name)
+		txdb[name], err = NewTransferDB(db, db, name)
 		if err != nil {
 			return nil, err
 		}
@@ -147,7 +173,7 @@ func NewDB(chainID *big.Int, username, password, name, host, rhost, secret strin
 
 		log.Default().Println("creating push token db for: ", name)
 
-		ptdb[name], err = NewPushTokenDB(db, rdb, name)
+		ptdb[name], err = NewPushTokenDB(db, db, name)
 		if err != nil {
 			return nil, err
 		}
@@ -181,74 +207,78 @@ func NewDB(chainID *big.Int, username, password, name, host, rhost, secret strin
 
 // EventTableExists checks if a table exists in the database
 func (db *DB) EventTableExists(suffix string) (bool, error) {
-	var exists bool
-	err := db.db.QueryRow(fmt.Sprintf(`
-    SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-        AND table_name = 't_events_%s'
-    );
-    `, suffix)).Scan(&exists)
+	tableName := fmt.Sprintf("t_events_%s", suffix)
+	row := db.db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", tableName)
+	var name string
+	err := row.Scan(&name)
 	if err != nil {
-		return false, err
+		if err == sql.ErrNoRows {
+			// Table does not exist
+			return false, nil
+		} else {
+			// A database error occurred
+			return false, err
+		}
 	}
 
-	return exists, nil
+	return true, nil
 }
 
 // SponsorTableExists checks if a table exists in the database
 func (db *DB) SponsorTableExists(suffix string) (bool, error) {
-	var exists bool
-	err := db.db.QueryRow(fmt.Sprintf(`
-    SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-        AND table_name = 't_sponsors_%s'
-    );
-    `, suffix)).Scan(&exists)
+	tableName := fmt.Sprintf("t_sponsors_%s", suffix)
+	row := db.db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", tableName)
+	var name string
+	err := row.Scan(&name)
 	if err != nil {
-		return false, err
+		if err == sql.ErrNoRows {
+			// Table does not exist
+			return false, nil
+		} else {
+			// A database error occurred
+			return false, err
+		}
 	}
 
-	return exists, nil
+	return true, nil
 }
 
 // TransferTableExists checks if a table exists in the database
 func (db *DB) TransferTableExists(suffix string) (bool, error) {
-	var exists bool
-	err := db.db.QueryRow(fmt.Sprintf(`
-    SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-        AND table_name = 't_transfers_%s'
-    );
-    `, suffix)).Scan(&exists)
+	tableName := fmt.Sprintf("t_transfers_%s", suffix)
+	row := db.db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", tableName)
+	var name string
+	err := row.Scan(&name)
 	if err != nil {
-		return false, err
+		if err == sql.ErrNoRows {
+			// Table does not exist
+			return false, nil
+		} else {
+			// A database error occurred
+			return false, err
+		}
 	}
 
-	return exists, nil
+	return true, nil
 }
 
 // PushTokenTableExists checks if a table exists in the database
 func (db *DB) PushTokenTableExists(suffix string) (bool, error) {
-	var exists bool
-	err := db.db.QueryRow(fmt.Sprintf(`
-    SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-        AND table_name = 't_push_token_%s'
-    );
-    `, suffix)).Scan(&exists)
+	tableName := fmt.Sprintf("t_push_token_%s", suffix)
+	row := db.db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", tableName)
+	var name string
+	err := row.Scan(&name)
 	if err != nil {
-		return false, err
+		if err == sql.ErrNoRows {
+			// Table does not exist
+			return false, nil
+		} else {
+			// A database error occurred
+			return false, err
+		}
 	}
 
-	return exists, nil
+	return true, nil
 }
 
 // TransferName returns the name of the transfer db for the given contract

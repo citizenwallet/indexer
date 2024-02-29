@@ -38,7 +38,7 @@ func NewService(evm indexer.EVMRequester, db *db.DB, useropq *queue.Service, chi
 	}
 }
 
-func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
+func (s *Service) Send(r *http.Request) (any, int) {
 	// parse contract address from url params
 	contractAddr := chi.URLParam(r, "pm_address")
 
@@ -47,21 +47,18 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	// Get the contract's bytecode
 	bytecode, err := s.evm.CodeAt(context.Background(), addr, nil)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	// Check if the contract is deployed
 	if len(bytecode) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		return nil, http.StatusBadRequest
 	}
 
 	// instantiate paymaster contract
 	pm, err := pay.NewPaymaster(addr, s.evm.Backend())
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	// parse the incoming params
@@ -69,8 +66,7 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	var params []any
 	err = json.NewDecoder(r.Body).Decode(&params)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		return nil, http.StatusBadRequest
 	}
 
 	var userop indexer.UserOp
@@ -82,52 +78,44 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 		case 0:
 			v, ok := param.(map[string]any)
 			if !ok {
-				w.WriteHeader(http.StatusBadRequest)
-				return
+				return nil, http.StatusBadRequest
 			}
 			b, err := json.Marshal(v)
 			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
+				return nil, http.StatusBadRequest
 			}
 
 			err = json.Unmarshal(b, &userop)
 			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
+				return nil, http.StatusBadRequest
 			}
 		case 1:
 			v, ok := param.(string)
 			if !ok {
-				w.WriteHeader(http.StatusBadRequest)
-				return
+				return nil, http.StatusBadRequest
 			}
 
 			epAddr = v
 		case 2:
 			v, ok := param.(map[string]any)
 			if !ok {
-				w.WriteHeader(http.StatusBadRequest)
-				return
+				return nil, http.StatusBadRequest
 			}
 
 			b, err := json.Marshal(v)
 			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
+				return nil, http.StatusBadRequest
 			}
 
 			err = json.Unmarshal(b, &txdata)
 			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
+				return nil, http.StatusBadRequest
 			}
 		}
 	}
 
 	if epAddr == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		return nil, http.StatusBadRequest
 	}
 
 	// check the paymaster signature, make sure it matches the paymaster address
@@ -147,34 +135,29 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	// Encode the values
 	validity, err := args.Unpack(userop.PaymasterAndData[20:84])
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	validUntil, ok := validity[0].(*big.Int)
 	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	validAfter, ok := validity[1].(*big.Int)
 	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	// check if the signature is theoretically still valid
 	now := time.Now().Unix()
 	if validUntil.Int64() < now || validAfter.Int64() > now {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		return nil, http.StatusBadRequest
 	}
 
 	// Get the hash of the message that was signed
 	hash, err := pm.GetHash(nil, pay.UserOperation(userop), validUntil, validAfter)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	// Convert the hash to an Ethereum signed message hash
@@ -189,22 +172,19 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	// recover the public key from the signature
 	sigPublicKey, err := crypto.Ecrecover(hhash, sig)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	// fetch the sponsor's corresponding private key from the db
 	sponsorKey, err := s.db.SponsorDB.GetSponsor(addr.Hex())
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	// Generate ecdsa.PrivateKey from bytes
 	privateKey, err := comm.HexToPrivateKey(sponsorKey.PrivateKey)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	publicKeyBytes := crypto.FromECDSAPub(&privateKey.PublicKey)
@@ -212,8 +192,7 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	// check if the public key matches the recovered public key
 	matches := bytes.Equal(sigPublicKey, publicKeyBytes)
 	if !matches {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		return nil, http.StatusBadRequest
 	}
 
 	entryPoint := common.HexToAddress(epAddr)
@@ -221,15 +200,13 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	// Parse the contract ABI
 	parsedABI, err := tokenEntryPoint.TokenEntryPointMetaData.GetAbi()
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	// Pack the function name and arguments into calldata
 	data, err := parsedABI.Pack("handleOps", []tokenEntryPoint.UserOperation{tokenEntryPoint.UserOperation(userop)}, entryPoint)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, http.StatusInternalServerError
 	}
 
 	// Create a new message
@@ -239,5 +216,5 @@ func (s *Service) Send(w http.ResponseWriter, r *http.Request) {
 	s.useropq.Enqueue(*message)
 
 	// Return the message ID
-	comm.JSONRPCBody(w, message.ID, nil)
+	return message.ID, http.StatusOK
 }

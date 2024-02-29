@@ -89,13 +89,40 @@ func StreamedBody(w http.ResponseWriter, body string) error {
 	return nil
 }
 
-func JSONRPCBody(w http.ResponseWriter, body any, meta any) error {
+func JSONRPCBody(w http.ResponseWriter, id int, body any, meta any) error {
 
 	b, err := json.Marshal(&indexer.JsonRPCResponse{
 		Version: "2.0",
-		ID:      1,
+		ID:      id,
 		Result:  body,
 	})
+	if err != nil {
+		return err
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	w.Write(b)
+
+	return nil
+}
+
+func JSONRPCMultiBody(w http.ResponseWriter, ids []int, bodies []any, meta any) error {
+
+	if len(ids) != len(bodies) {
+		return errors.New("ids and bodies must have the same length")
+	}
+
+	responses := make([]indexer.JsonRPCResponse, len(ids))
+
+	for i, id := range ids {
+		responses[i] = indexer.JsonRPCResponse{
+			Version: "2.0",
+			ID:      id,
+			Result:  bodies[i],
+		}
+	}
+
+	b, err := json.Marshal(&responses)
 	if err != nil {
 		return err
 	}

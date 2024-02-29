@@ -19,6 +19,7 @@ import (
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/indexer/pkg/queue"
 	"github.com/citizenwallet/indexer/pkg/router"
+	"github.com/citizenwallet/indexer/pkg/wallet"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/getsentry/sentry-go"
 )
@@ -189,6 +190,18 @@ func main() {
 	}()
 
 	log.Default().Println("listening on port: ", *port)
+
+	log.Default().Println("starting wallet server...")
+
+	wallet := wallet.NewServer("/.wallet")
+
+	walletPort := *port + 1
+
+	go func() {
+		quitAck <- wallet.Start(walletPort)
+	}()
+
+	log.Default().Println("serving on port: ", walletPort)
 
 	for err := range quitAck {
 		if err != nil {

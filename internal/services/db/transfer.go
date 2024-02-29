@@ -343,6 +343,44 @@ func (db *TransferDB) GetTransfer(hash string) (*indexer.Transfer, error) {
 	return &transfer, nil
 }
 
+// GetAllPaginatedTransfers returns the transfers paginated
+func (db *TransferDB) GetAllPaginatedTransfers(tokenId int64, maxDate time.Time, limit, offset int) ([]*indexer.Transfer, error) {
+	transfers := []*indexer.Transfer{}
+
+	rows, err := db.rdb.Query(fmt.Sprintf(`
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
+		FROM t_transfers_%s
+		WHERE created_at <= $1 AND token_id = $2
+		ORDER BY created_at DESC
+		LIMIT $7 OFFSET $8
+		`, db.suffix), maxDate, tokenId, limit, offset)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return transfers, nil
+		}
+
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var transfer indexer.Transfer
+		var value string
+
+		err := rows.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
+		if err != nil {
+			return nil, err
+		}
+
+		transfer.Value = new(big.Int)
+		transfer.Value.SetString(value, 10)
+
+		transfers = append(transfers, &transfer)
+	}
+
+	return transfers, nil
+}
+
 // GetPaginatedTransfers returns the transfers for a given from_addr or to_addr paginated
 func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate time.Time, limit, offset int) ([]*indexer.Transfer, error) {
 	transfers := []*indexer.Transfer{}

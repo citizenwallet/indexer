@@ -12,7 +12,6 @@ type Config struct {
 	RPCChainName          string `env:"RPC_CHAIN_NAME,default=ethereum"`
 	RPCURL                string `env:"RPC_URL,default=http://localhost:8545"`
 	RPCWSURL              string `env:"RPC_WS_URL,default=ws://localhost:8545"`
-	BundlerRPCURL         string `env:"ERC4337_RPC_URL,required"`
 	EntryPointAddress     string `env:"ERC4337_ENTRYPOINT,required"`
 	AccountFactoryAddress string `env:"ERC4337_ACCOUNT_FACTORY,required"`
 	BundlerOriginHeader   string `env:"ERC4337_ORIGIN_HEADER,required"`

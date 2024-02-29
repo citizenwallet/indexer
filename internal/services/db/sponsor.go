@@ -50,9 +50,17 @@ func (db *SponsorDB) CreateSponsorsTable(suffix string) error {
 	CREATE TABLE t_sponsors_%s(
 		contract TEXT NOT NULL PRIMARY KEY,
 		pk text NOT NULL,
-		created_at timestamp NOT NULL,
-		updated_at timestamp NOT NULL
+		created_at timestamp NOT NULL DEFAULT current_timestamp,
+		updated_at timestamp NOT NULL DEFAULT current_timestamp
 	);
+	`, suffix))
+
+	if err != nil {
+		return err
+	}
+
+	_, err = db.db.Exec(fmt.Sprintf(`
+	COMMENT ON COLUMN t_sponsors_%s."contract" IS 'paymaster contract address';
 	`, suffix))
 
 	return err

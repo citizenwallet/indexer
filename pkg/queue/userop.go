@@ -107,7 +107,13 @@ func (s *UserOpService) Process(message indexer.Message) (indexer.Message, error
 		log.FromTo = log.CombineFromTo()
 
 		// Get the transfer database for the destination address
-		tdb, ok = s.db.TransferDB[s.db.TransferName(dest.Hex())]
+		name, flag := s.db.TransferName(dest.Hex())
+		if flag {
+			err := errors.New("Bad contract address")
+			return message, err
+		}
+
+		tdb, ok = s.db.TransferDB[name]
 		if ok {
 			// If the transfer database exists, add the transfer log to it
 			tdb.AddTransfer(log)

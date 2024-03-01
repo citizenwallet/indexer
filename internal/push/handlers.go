@@ -64,7 +64,11 @@ func (s *Service) AddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tname := s.db.TransferName(contractAddr)
+	tname, flag := s.db.TransferName(contractAddr)
+	if flag {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
 
 	pdb, ok := s.db.PushTokenDB[tname]
 	if !ok {
@@ -115,7 +119,11 @@ func (s *Service) RemoveAccountToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tname := s.db.TransferName(contractAddr)
+	tname, flag := s.db.TransferName(contractAddr)
+	if flag {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
 
 	pdb, ok := s.db.PushTokenDB[tname]
 	if !ok {

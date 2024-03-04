@@ -147,7 +147,7 @@ func NewDB(chainID *big.Int, username, password, name, host, rhost, secret strin
 	for _, ev := range evs {
 		name, flag := d.TransferName(ev.Contract)
 		if flag {
-			err := errors.New("Bad contract address")
+			err := errors.New("bad contract address")
 			return nil, err
 		}
 
@@ -335,7 +335,7 @@ func (d *DB) GetPushTokenDB(contract string) (*PushTokenDB, bool) {
 func (d *DB) AddTransferDB(contract string) (*TransferDB, error) {
 	name, flag := d.TransferName(contract)
 	if flag {
-		err := errors.New("Bad contract address")
+		err := errors.New("bad contract address")
 		return nil, err
 	}
 
@@ -356,7 +356,7 @@ func (d *DB) AddTransferDB(contract string) (*TransferDB, error) {
 func (d *DB) AddPushTokenDB(contract string) (*PushTokenDB, error) {
 	name, flag := d.TransferName(contract)
 	if flag {
-		err := errors.New("Bad contract address")
+		err := errors.New("bad contract address")
 		return nil, err
 	}
 	d.mu.Lock()

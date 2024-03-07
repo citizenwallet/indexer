@@ -27,7 +27,7 @@ jobs:
       - name: Create ui folder
         run: |
           mkdir _ui
-          mkdrir _ui/wallet
+          mkdir _ui/wallet
           cd _ui/wallet
           touch index.html
 

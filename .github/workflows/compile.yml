@@ -19,7 +19,7 @@ jobs:
           go-version: ^1.20
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Download dependencies
         run: go mod download
@@ -54,4 +54,4 @@ jobs:
         run: |
           git add -f binaries/*
           git commit -m "Add compiled binaries"
-          git push
+          git push origin main

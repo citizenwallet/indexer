@@ -52,6 +52,6 @@ jobs:
 
       - name: Commit and push
         run: |
-          git add binaries/*
+          git add -f binaries/*
           git commit -m "Add compiled binaries"
           git push

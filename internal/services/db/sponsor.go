@@ -55,14 +55,6 @@ func (db *SponsorDB) CreateSponsorsTable(suffix string) error {
 	);
 	`, suffix))
 
-	if err != nil {
-		return err
-	}
-
-	_, err = db.db.Exec(fmt.Sprintf(`
-	COMMENT ON COLUMN t_sponsors_%s."contract" IS 'paymaster contract address';
-	`, suffix))
-
 	return err
 }
 

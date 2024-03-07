@@ -12,6 +12,7 @@ func reconcileTransfersWithDB(txdb *db.TransferDB, txs []*indexer.Transfer) erro
 		// check if the transfer already exists
 		exists, err := txdb.TransferExists(tx.TxHash, tx.From, tx.To, tx.Value.String())
 		if err != nil {
+			println("error checking if transfer exists", err.Error())
 			return err
 		}
 
@@ -24,6 +25,7 @@ func reconcileTransfersWithDB(txdb *db.TransferDB, txs []*indexer.Transfer) erro
 				// there is an optimistic transaction, set its tx_hash and status
 				err = txdb.ReconcileTx(tx.TxHash, hash, tx.Nonce)
 				if err != nil {
+					println("error reconciling tx", err.Error())
 					return err
 				}
 
@@ -36,6 +38,7 @@ func reconcileTransfersWithDB(txdb *db.TransferDB, txs []*indexer.Transfer) erro
 
 		err = txdb.SetStatusFromHash(string(indexer.TransferStatusSuccess), tx.Hash)
 		if err != nil {
+			println("error setting status from hash", err.Error())
 			return err
 		}
 	}
@@ -44,6 +47,7 @@ func reconcileTransfersWithDB(txdb *db.TransferDB, txs []*indexer.Transfer) erro
 		// add the new transfers to the db
 		err := txdb.AddTransfers(newTxs)
 		if err != nil {
+			println("error adding transfers", err.Error())
 			return err
 		}
 	}

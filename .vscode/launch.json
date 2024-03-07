@@ -18,7 +18,9 @@
         "-sync",
         "1",
         "-fbpath",
-        "../../firebase.json"
+        "../../firebase.json",
+        "-dbpath",
+        "../../"
       ]
     },
     {
@@ -37,7 +39,9 @@
         "-fbpath",
         "../../firebase.json",
         "-evm",
-        "celo"
+        "celo",
+        "-dbpath",
+        "../../"
       ]
     },
     {
@@ -55,7 +59,9 @@
         "1",
         "-onlyApi",
         "-fbpath",
-        "../../firebase.json"
+        "../../firebase.json",
+        "-dbpath",
+        "../../"
       ]
     }
   ]

@@ -2,9 +2,12 @@ name: Compile
 
 on:
   push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: "indexer-compile"
+  cancel-in-progress: true
 
 jobs:
   build:

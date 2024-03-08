@@ -37,9 +37,6 @@ jobs:
 
       - name: Notify of successful web deploy
         run: |
-          fullVersion=$(echo | grep -i -e "version: " pubspec.yaml)
-          buildName=$(echo $fullVersion | cut -d " " -f 2 | cut -d "+" -f 1)
-          buildNumber=$(echo $fullVersion | cut -d "+" -f 2 )
           curl --location '${{ secrets.DISCORD_WEBHOOK_URL }}' \
           --header 'Content-Type: application/json' \
           --data '{

@@ -53,7 +53,7 @@ jobs:
           CC: aarch64-linux-gnu-gcc
           CXX: aarch64-linux-gnu-g++
           GOOS: linux
-          GOARCH: arm64
+          GOARCH: aarch64
           CGO_ENABLED: 1
         run: |
           go build -v -o binaries/linux_arm64/indexer cmd/node/main.go

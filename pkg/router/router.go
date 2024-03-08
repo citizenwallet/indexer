@@ -2,6 +2,7 @@ package router
 
 import (
 	"crypto/ecdsa"
+	"crypto/tls"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -54,13 +55,12 @@ func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr str
 	}
 }
 
-// implement the Server interface
-func (r *Router) Start(port int) error {
+func (r *Router) CreateHandler() (http.Handler, error) {
 	cr := chi.NewRouter()
 
 	comm, err := ethrequest.NewCommunity(r.evm, r.epAddr, r.accFactAddr, r.prfAddr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// configure middleware
@@ -155,6 +155,35 @@ func (r *Router) Start(port int) error {
 		cr.Delete("/{acc_addr}", withSignature(r.evm, legpr.Unpin))
 	})
 
+	return cr, nil
+}
+
+func (r *Router) Start(port int, handler http.Handler) error {
 	// start the server
-	return http.ListenAndServe(fmt.Sprintf(":%v", port), cr)
+	return http.ListenAndServe(fmt.Sprintf(":%v", port), handler)
+}
+
+func (r *Router) StartTLS(domain string, handler http.Handler) error {
+	certFile := fmt.Sprintf("/etc/letsencrypt/live/%s/fullchain.pem", domain)
+	keyFile := fmt.Sprintf("/etc/letsencrypt/live/%s/privkey.pem", domain)
+
+	config := &tls.Config{
+		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			crt, err := tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				return nil, err
+			}
+
+			return &crt, err
+		},
+	}
+
+	server := &http.Server{
+		Addr:      fmt.Sprintf(":%v", 443),
+		Handler:   handler,
+		TLSConfig: config,
+	}
+
+	// start the server
+	return server.ListenAndServeTLS("", "")
 }

@@ -50,6 +50,8 @@ func main() {
 
 	port := flag.Int("port", 3000, "port to listen on")
 
+	domain := flag.String("domain", "localhost", "domain to listen on")
+
 	sync := flag.Int("sync", 1, "sync from block number (default: 1)")
 
 	useropqbf := flag.Int("buffer", 100, "userop queue buffer size (default: 100)")
@@ -69,6 +71,10 @@ func main() {
 	dbpath := flag.String("dbpath", ".", "path to db")
 
 	flag.Parse()
+
+	if *port == 443 && (domain == nil || *domain == "") {
+		log.Fatal("domain is required when running on port 443")
+	}
 
 	ctx := context.Background()
 
@@ -188,7 +194,17 @@ func main() {
 	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, useropq, bu, fb, privateKey)
 
 	go func() {
-		quitAck <- api.Start(*port)
+		handler, err := api.CreateHandler()
+		if err != nil {
+			quitAck <- err
+			return
+		}
+
+		if *port == 443 {
+			quitAck <- api.StartTLS(*domain, handler)
+			return
+		}
+		quitAck <- api.Start(*port, handler)
 	}()
 
 	log.Default().Println("listening on port: ", *port)

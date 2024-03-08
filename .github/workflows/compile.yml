@@ -36,14 +36,14 @@ jobs:
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: 1
-        run: go build -v -o binaries/linux_amd64/indexer
+        run: go build -v -o binaries/linux_amd64/indexer cmd/node/main.go
 
       - name: Build for Linux arm64
         env:
           GOOS: linux
           GOARCH: arm64
           CGO_ENABLED: 1
-        run: go build -v -o binaries/linux_arm64/indexer
+        run: go build -v -o binaries/linux_arm64/indexer cmd/node/main.go
 
       - name: Configure Git
         run: |

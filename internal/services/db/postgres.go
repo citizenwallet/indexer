@@ -392,8 +392,9 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string) error {
 
 		// migrate all push tokens
 		batchSize := 100
+		offset := 0
 		for {
-			rows, err := d.rdb.Query(fmt.Sprintf("SELECT token, account FROM t_push_token_%s ORDER BY token LIMIT $1", name), batchSize)
+			rows, err := d.rdb.Query(fmt.Sprintf("SELECT token, account FROM t_push_token_%s ORDER BY token LIMIT $1 OFFSET $2", name), batchSize, offset)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -421,17 +422,21 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string) error {
 				// If we fetched fewer rows than the batch size, we've fetched all rows.
 				break
 			}
+
+			// Increment the offset by batchSize for the next iteration.
+			offset += batchSize
 		}
 
 		log.Default().Println("migrating transfers")
 
 		// migrate all transfers
 		batchSize = 1000
+		offset = 0
 		for {
 			rows, err := d.rdb.Query(fmt.Sprintf(`
 				SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
-				FROM t_transfers_%s ORDER BY created_at LIMIT $1
-			`, name), batchSize)
+				FROM t_transfers_%s ORDER BY created_at LIMIT $1  OFFSET $2
+			`, name), batchSize, offset)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -464,6 +469,9 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string) error {
 				// If we fetched fewer rows than the batch size, we've fetched all rows.
 				break
 			}
+
+			// Increment the offset by batchSize for the next iteration.
+			offset += batchSize
 		}
 	}
 

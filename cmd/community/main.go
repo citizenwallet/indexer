@@ -50,7 +50,7 @@ func main() {
 
 	port := flag.Int("port", 3000, "port to listen on")
 
-	certpath := flag.String("certpath", "~/certs", "cert folder path")
+	certpath := flag.String("certpath", "./certs", "cert folder path")
 
 	sync := flag.Int("sync", 1, "sync from block number (default: 1)")
 

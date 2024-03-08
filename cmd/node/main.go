@@ -47,7 +47,7 @@ func main() {
 
 	env := flag.String("env", ".env", "path to .env file")
 
-	certpath := flag.String("certpath", "~/certs", "cert folder path")
+	certpath := flag.String("certpath", "./certs", "cert folder path")
 
 	port := flag.Int("port", 3000, "port to listen on")
 

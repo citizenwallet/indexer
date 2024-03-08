@@ -40,5 +40,5 @@ jobs:
           curl --location '${{ secrets.DISCORD_WEBHOOK_URL }}' \
           --header 'Content-Type: application/json' \
           --data '{
-              "content": "new binaries available: ${{ steps.bump-semver.outputs.new_version }}\n\n download: \n `curl -O https://github.com/citizenwallet/indexer/raw/${{ steps.bump-semver.outputs.new_version }}/binaries/linux_arm64/indexer`"
+              "content": "new binaries available: ${{ steps.bump-semver.outputs.new_version }}\n\n download for arm64: \n `curl -L https://github.com/citizenwallet/indexer/raw/${{ steps.bump-semver.outputs.new_version }}/binaries/linux_arm64/indexer -o indexer && chmod +x indexer`\n\n download for amd64: \n `curl -L https://github.com/citizenwallet/indexer/raw/${{ steps.bump-semver.outputs.new_version }}/binaries/linux_amd64/indexer -o indexer && chmod +x indexer`"
           }'

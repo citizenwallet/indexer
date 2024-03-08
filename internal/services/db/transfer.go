@@ -134,7 +134,6 @@ func (db *TransferDB) AddTransfer(tx *indexer.Transfer) error {
 
 // AddTransfers adds a list of transfers to the db
 func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
-	println("adding transfers")
 
 	dbtx, err := db.db.BeginTx(context.Background(), nil)
 	if err != nil {
@@ -190,7 +189,7 @@ func (db *TransferDB) SetStatusFromHash(status, hash string) error {
 
 // ReconcileTxHash updates transfers to ensure that there are no duplicates
 func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
-	println("reconciling tx", tx.TxHash)
+
 	// check if there are multiple transfers with the same tx_hash
 	var count int
 	row := db.rdb.QueryRow(fmt.Sprintf(`
@@ -541,7 +540,6 @@ func (db *TransferDB) UpdateTransfersWithDB(txs []*indexer.Transfer) ([]*indexer
 		ON tx.hash = b.hash;
 		`, hashStr, db.suffix))
 	if err != nil {
-		println("error updating transfers with db", err.Error())
 		if err == sql.ErrNoRows {
 			return txs, nil
 		}

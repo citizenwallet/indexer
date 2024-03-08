@@ -50,6 +50,8 @@ func main() {
 
 	port := flag.Int("port", 3000, "port to listen on")
 
+	certpath := flag.String("certpath", "./certs", "cert folder path")
+
 	sync := flag.Int("sync", 1, "sync from block number (default: 1)")
 
 	useropqbf := flag.Int("buffer", 100, "userop queue buffer size (default: 100)")
@@ -136,7 +138,7 @@ func main() {
 
 	log.Default().Println("starting internal db service...")
 
-	d, err := db.NewDB(chid, *dbpath, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost, conf.DBSecret)
+	d, err := db.NewDB(chid, *dbpath, conf.DBSecret)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -188,7 +190,17 @@ func main() {
 	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, useropq, bu, fb, privateKey)
 
 	go func() {
-		quitAck <- api.Start(*port)
+		handler, err := api.CreateHandler()
+		if err != nil {
+			quitAck <- err
+			return
+		}
+
+		if *port == 443 {
+			quitAck <- api.StartTLS(*certpath, handler)
+			return
+		}
+		quitAck <- api.Start(*port, handler)
 	}()
 
 	log.Default().Println("listening on port: ", *port)

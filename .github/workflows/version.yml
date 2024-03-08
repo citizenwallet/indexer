@@ -34,3 +34,14 @@ jobs:
         with:
           tag: ${{ steps.bump-semver.outputs.new_version }}
           message: "[tagged] ${{ steps.bump-semver.outputs.new_version }}"
+
+      - name: Notify of successful web deploy
+        run: |
+          fullVersion=$(echo | grep -i -e "version: " pubspec.yaml)
+          buildName=$(echo $fullVersion | cut -d " " -f 2 | cut -d "+" -f 1)
+          buildNumber=$(echo $fullVersion | cut -d "+" -f 2 )
+          curl --location '${{ secrets.DISCORD_WEBHOOK_URL }}' \
+          --header 'Content-Type: application/json' \
+          --data '{
+              "content": "new binaries available: ${{ steps.bump-semver.outputs.new_version }}\n\n download: \n `curl -O https://github.com/citizenwallet/indexer/raw/${{ steps.bump-semver.outputs.new_version }}/binaries/linux_arm64/indexer`"
+          }'

@@ -58,6 +58,10 @@ jobs:
       - name: Commit and push
         run: |
           git add -f binaries/*
-          git commit -m "Add compiled binaries"
-          BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/})
-          git push origin $BRANCH_NAME
+          if git diff-index --quiet HEAD --; then
+            echo "No changes to commit"
+          else
+            git commit -m "Add compiled binaries"
+            BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/})
+            git push origin $BRANCH_NAME
+          fi

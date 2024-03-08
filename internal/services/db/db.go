@@ -31,7 +31,7 @@ type DB struct {
 }
 
 // NewDB instantiates a new DB
-func NewDB(chainID *big.Int, basePath, username, password, name, host, rhost, secret string) (*DB, error) {
+func NewDB(chainID *big.Int, basePath, secret string) (*DB, error) {
 	// basePath := "."
 	folderPath := fmt.Sprintf("%s/%s", basePath, dbBaseFolder)
 	path := fmt.Sprintf("%s/cw.db", folderPath)

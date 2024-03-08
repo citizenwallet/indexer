@@ -36,7 +36,9 @@ jobs:
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: 1
-        run: go build -v -o binaries/linux_amd64/indexer cmd/node/main.go
+        run: |
+          go build -v -o binaries/linux_amd64/indexer cmd/node/main.go
+          go build -v -o binaries/linux_amd64/pqmigrator cmd/migrator/main.go
 
       - name: Install ARM compilation dependencies
         run: sudo apt-get install -y gcc-aarch64-linux-gnu
@@ -48,7 +50,9 @@ jobs:
           GOOS: linux
           GOARCH: arm64
           CGO_ENABLED: 1
-        run: go build -v -o binaries/linux_arm64/indexer cmd/node/main.go
+        run: |
+          go build -v -o binaries/linux_arm64/indexer cmd/node/main.go
+          go build -v -o binaries/linux_arm64/pqmigrator cmd/migrator/main.go
 
       - name: Configure Git
         run: |

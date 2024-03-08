@@ -40,6 +40,8 @@ jobs:
 
       - name: Build for Linux arm64
         env:
+          CC: arm-linux-gnueabihf-gcc
+          CXX: arm-linux-gnueabihf-g++
           GOOS: linux
           GOARCH: arm64
           CGO_ENABLED: 1

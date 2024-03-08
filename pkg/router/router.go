@@ -163,9 +163,9 @@ func (r *Router) Start(port int, handler http.Handler) error {
 	return http.ListenAndServe(fmt.Sprintf(":%v", port), handler)
 }
 
-func (r *Router) StartTLS(domain string, handler http.Handler) error {
-	certFile := fmt.Sprintf("/etc/letsencrypt/live/%s/fullchain.pem", domain)
-	keyFile := fmt.Sprintf("/etc/letsencrypt/live/%s/privkey.pem", domain)
+func (r *Router) StartTLS(certpath string, handler http.Handler) error {
+	certFile := fmt.Sprintf("%s/fullchain.pem", certpath)
+	keyFile := fmt.Sprintf("%s/privkey.pem", certpath)
 
 	config := &tls.Config{
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {

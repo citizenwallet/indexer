@@ -50,7 +50,7 @@ func main() {
 
 	port := flag.Int("port", 3000, "port to listen on")
 
-	domain := flag.String("domain", "localhost", "domain to listen on")
+	certpath := flag.String("certpath", "~/certs", "cert folder path")
 
 	sync := flag.Int("sync", 1, "sync from block number (default: 1)")
 
@@ -71,10 +71,6 @@ func main() {
 	dbpath := flag.String("dbpath", ".", "path to db")
 
 	flag.Parse()
-
-	if *port == 443 && (domain == nil || *domain == "") {
-		log.Fatal("domain is required when running on port 443")
-	}
 
 	ctx := context.Background()
 
@@ -201,7 +197,7 @@ func main() {
 		}
 
 		if *port == 443 {
-			quitAck <- api.StartTLS(*domain, handler)
+			quitAck <- api.StartTLS(*certpath, handler)
 			return
 		}
 		quitAck <- api.Start(*port, handler)

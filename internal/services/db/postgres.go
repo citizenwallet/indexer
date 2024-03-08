@@ -393,7 +393,7 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string) error {
 		// migrate all push tokens
 		batchSize := 100
 		for {
-			rows, err := d.rdb.Query(fmt.Sprintf("SELECT * FROM t_push_token_%s ORDER BY token LIMIT $1", name), batchSize)
+			rows, err := d.rdb.Query(fmt.Sprintf("SELECT token, account FROM t_push_token_%s ORDER BY token LIMIT $1", name), batchSize)
 			if err != nil {
 				log.Fatal(err)
 			}

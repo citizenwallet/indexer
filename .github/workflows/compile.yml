@@ -36,14 +36,19 @@ jobs:
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: 1
-        run: go build -v -o binaries/linux_amd64/indexer
+        run: go build -v -o binaries/linux_amd64/indexer cmd/node/main.go
+
+      - name: Install ARM compilation dependencies
+        run: sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Build for Linux arm64
         env:
+          CC: aarch64-linux-gnu-gcc
+          CXX: aarch64-linux-gnu-g++
           GOOS: linux
           GOARCH: arm64
           CGO_ENABLED: 1
-        run: go build -v -o binaries/linux_arm64/indexer
+        run: go build -v -o binaries/linux_arm64/indexer cmd/node/main.go
 
       - name: Configure Git
         run: |
@@ -53,6 +58,10 @@ jobs:
       - name: Commit and push
         run: |
           git add -f binaries/*
-          git commit -m "Add compiled binaries"
-          BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/})
-          git push origin $BRANCH_NAME
+          if git diff-index --quiet HEAD --; then
+            echo "No changes to commit"
+          else
+            git commit -m "Add compiled binaries"
+            BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/})
+            git push origin $BRANCH_NAME
+          fi

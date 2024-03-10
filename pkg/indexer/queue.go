@@ -17,7 +17,6 @@ type Message struct {
 type UserOpMessage struct {
 	Paymaster common.Address
 	To        common.Address
-	Data      []byte
 	ChainId   *big.Int
 	UserOp    UserOp
 	ExtraData any
@@ -32,11 +31,10 @@ func newMessage(id string, message any) *Message {
 	}
 }
 
-func NewTxMessage(pm, to common.Address, data []byte, chainId *big.Int, userop UserOp, txdata *TransferData) *Message {
+func NewTxMessage(pm, to common.Address, chainId *big.Int, userop UserOp, txdata *TransferData) *Message {
 	op := UserOpMessage{
 		Paymaster: pm,
 		To:        to,
-		Data:      data,
 		ChainId:   chainId,
 		UserOp:    userop,
 		ExtraData: txdata,

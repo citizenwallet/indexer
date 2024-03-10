@@ -10,6 +10,8 @@ import (
 	"github.com/citizenwallet/indexer/pkg/indexer"
 )
 
+const batchSize = 10 // Size of each batch
+
 // Service struct represents a queue service with a queue channel, quit channel, maximum retries, context and a webhook messager.
 type Service struct {
 	name       string               // Name of the queue service
@@ -24,7 +26,7 @@ type Service struct {
 
 // Processor is an interface that must be implemented by the consumer of the queue
 type Processor interface {
-	Process(indexer.Message) (indexer.Message, error) // Process method to process a message
+	Process([]indexer.Message) ([]indexer.Message, []error) // Process method to process a message
 }
 
 // NewService function initializes a new Service with provided maximum retries, context and webhook messager.
@@ -71,22 +73,46 @@ func (s *Service) Start(p Processor) error {
 	for {
 		select {
 		case message := <-s.queue:
-			msg, err := p.Process(message)
-			if err != nil {
-				if msg.RetryCount < s.maxRetries {
-					msg.RetryCount++
+			// Create a batch
+			batch := make([]indexer.Message, 0, batchSize)
 
-					if len(s.queue) < 1 {
-						extraWait := time.Duration(msg.RetryCount) * time.Second
-						time.Sleep(extraWait)
+			batch = append(batch, message)
+
+			time.Sleep(250 * time.Millisecond)
+
+			// Fill the batch
+		batchLoop:
+			for len(batch) < batchSize {
+				select {
+				case item, ok := <-s.queue:
+					if !ok {
+						return fmt.Errorf("channel is closed") // Channel is closed
+					}
+					batch = append(batch, item)
+				default:
+					break batchLoop // Channel is empty
+				}
+			}
+
+			msgs, errs := p.Process(batch)
+			for i, msg := range msgs {
+				err := errs[i]
+				if err != nil {
+					if msg.RetryCount < s.maxRetries {
+						msg.RetryCount++
+
+						if len(s.queue) < 1 && len(msgs) == 1 {
+							extraWait := time.Duration(msg.RetryCount) * time.Second
+							time.Sleep(extraWait)
+						}
+
+						s.Enqueue(msg)
+						continue
 					}
 
-					s.Enqueue(msg)
-					continue
-				}
-
-				if s.wm != nil {
-					s.wm.NotifyError(s.ctx, err)
+					if s.wm != nil {
+						s.wm.NotifyError(s.ctx, err)
+					}
 				}
 			}
 		case <-s.quit:

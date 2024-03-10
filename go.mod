@@ -10,6 +10,7 @@ require (
 	github.com/getsentry/sentry-go v0.22.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/joho/godotenv v1.5.1
+	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.20
 	github.com/sethvargo/go-envconfig v0.9.0
 	github.com/swaggo/swag v1.16.2
@@ -62,7 +63,6 @@ require (
 	github.com/holiman/uint256 v1.2.3 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
-	github.com/lib/pq v1.10.9 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect

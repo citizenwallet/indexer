@@ -85,6 +85,11 @@ func (i *Indexer) FilterQueryFromEvent(ev *indexer.Event) *ethereum.FilterQuery 
 	}
 }
 
+type cleanup struct {
+	t uint64
+	b uint64
+}
+
 func (i *Indexer) EventsFromLogStream(ctx context.Context, quitAck chan error, ev *indexer.Event) error {
 	var err error
 

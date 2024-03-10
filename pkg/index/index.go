@@ -115,11 +115,6 @@ func (i *Indexer) Background(syncrate int) error {
 	}
 }
 
-type cleanup struct {
-	t uint64
-	b uint64
-}
-
 // ListenBackground starts an indexer service that listens for blocks in the background
 func (i *Indexer) ListenBackground(ctx context.Context) error {
 	evs, err := i.db.EventDB.GetEvents()

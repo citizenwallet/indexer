@@ -35,6 +35,7 @@ type EVMRequester interface {
 	LatestBlock() (*big.Int, error)
 	FilterLogs(q ethereum.FilterQuery) ([]types.Log, error)
 	BlockTime(number *big.Int) (uint64, error)
+	ListenForLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- types.Log) error
 
 	WaitForTx(tx *types.Transaction) error
 

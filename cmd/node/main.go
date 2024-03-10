@@ -148,8 +148,6 @@ func main() {
 	fb := firebase.NewPushService(ctx, *fbpath)
 
 	if !*onlyAPI {
-		log.Default().Println("starting index service...")
-
 		i, err := index.New(*rate, chid, d, evm, fb)
 		if err != nil {
 			log.Fatal(err)
@@ -157,7 +155,13 @@ func main() {
 		defer i.Close()
 
 		go func() {
-			quitAck <- i.Background(*sync)
+			if *ws {
+				log.Default().Println("starting index service in websocket mode...")
+				quitAck <- i.ListenBackground(ctx)
+			} else {
+				log.Default().Println("starting index service...")
+				quitAck <- i.Background(*sync)
+			}
 		}()
 	}
 

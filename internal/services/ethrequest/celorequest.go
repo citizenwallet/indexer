@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -59,6 +61,35 @@ func (e *CeloService) BlockTime(number *big.Int) (uint64, error) {
 	}
 
 	return v, nil
+}
+
+func (e *CeloService) ListenForLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- types.Log) error {
+	for {
+		sub, err := e.client.SubscribeFilterLogs(ctx, q, ch)
+		if err != nil {
+			log.Default().Println("error subscribing to logs", err.Error())
+
+			<-time.After(1 * time.Second)
+
+			continue
+		}
+
+		select {
+		case <-ctx.Done():
+			log.Default().Println("context done, unsubscribing")
+			sub.Unsubscribe()
+
+			return ctx.Err()
+		case err := <-sub.Err():
+			// subscription error, try and re-subscribe
+			log.Default().Println("subscription error", err.Error())
+			sub.Unsubscribe()
+
+			<-time.After(1 * time.Second)
+
+			continue
+		}
+	}
 }
 
 func (e *CeloService) Backend() bind.ContractBackend {

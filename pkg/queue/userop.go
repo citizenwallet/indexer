@@ -259,20 +259,18 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			}
 		}
 
-		go func() {
-			// async wait for the transaction to be mined
-			err = s.evm.WaitForTx(signedTx)
-			if err != nil {
-				for dest, hashes := range insertedTransfers {
-					tdb, ok := s.db.TransferDB[s.db.TransferName(dest.Hex())]
-					if ok {
-						for _, hash := range hashes {
-							tdb.RemoveTransfer(hash)
-						}
+		// async wait for the transaction to be mined
+		err = s.evm.WaitForTx(signedTx) // if we want to make this non-blocking, we need to store and manually increment the nonce
+		if err != nil {
+			for dest, hashes := range insertedTransfers {
+				tdb, ok := s.db.TransferDB[s.db.TransferName(dest.Hex())]
+				if ok {
+					for _, hash := range hashes {
+						tdb.RemoveTransfer(hash)
 					}
 				}
 			}
-		}()
+		}
 	}
 
 	return invalid, errors

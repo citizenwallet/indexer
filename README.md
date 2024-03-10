@@ -91,6 +91,12 @@ When the indexer starts up, logs are downloaded block by block to make sure all 
 
 After the initial indexing work is done, indexer will sync the latest blocks every few seconds.
 
+## Websocket Sync
+
+When the indexer starts up, it will simply listen for each event on the contracts you want.
+
+Logs that are emitted are processed and inserted into the DB.
+
 ### Standards
 
 Syncing is done by standards, querying is done by event types on contracts. ERC20, ERC721, ERC1155 are supported as of this moment. We have only implemented indexing of transfer events.

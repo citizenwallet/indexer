@@ -1,6 +1,7 @@
 package index
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 
@@ -9,15 +10,26 @@ import (
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+
+	comm "github.com/citizenwallet/indexer/internal/common"
 )
 
-func (i *Indexer) EventsFromBlock(ev *indexer.Event, blk *block, ptdb *db.PushTokenDB) error {
-	contractAbi, err := GetContractABI(ev.Standard)
+func (i *Indexer) EventsFromBlock(ev *indexer.Event, blk *block) error {
+	var err error
 	topics := GetContractTopics(ev.Standard)
 
 	txdb, ok := i.db.GetTransferDB(ev.Contract)
 	if !ok {
 		txdb, err = i.db.AddTransferDB(ev.Contract)
+		if err != nil {
+			return err
+		}
+	}
+
+	ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
+	if !ok {
+		ptdb, err = i.db.AddPushTokenDB(ev.Contract)
 		if err != nil {
 			return err
 		}
@@ -53,6 +65,97 @@ func (i *Indexer) EventsFromBlock(ev *indexer.Event, blk *block, ptdb *db.PushTo
 	if err != nil {
 		return ErrIndexingRecoverable
 	}
+
+	return i.processTransfersFromLogs(ev, blk, txdb, ptdb, logs)
+}
+
+func (i *Indexer) FilterQueryFromEvent(ev *indexer.Event) *ethereum.FilterQuery {
+	topics := GetContractTopics(ev.Standard)
+
+	// Calculate the starting block for the filter query
+	// It's the last block that was indexed plus one
+	fromBlock := ev.LastBlock + 1
+
+	contractAddr := common.HexToAddress(ev.Contract)
+
+	return &ethereum.FilterQuery{
+		FromBlock: big.NewInt(fromBlock),
+		Addresses: []common.Address{contractAddr},
+		Topics:    topics,
+	}
+}
+
+type cleanup struct {
+	t uint64
+	b uint64
+}
+
+func (i *Indexer) EventsFromLogStream(ctx context.Context, quitAck chan error, ev *indexer.Event) error {
+	var err error
+
+	txdb, ok := i.db.GetTransferDB(ev.Contract)
+	if !ok {
+		txdb, err = i.db.AddTransferDB(ev.Contract)
+		if err != nil {
+			return err
+		}
+	}
+
+	ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
+	if !ok {
+		ptdb, err = i.db.AddPushTokenDB(ev.Contract)
+		if err != nil {
+			return err
+		}
+	}
+
+	logch := make(chan types.Log)
+
+	q := i.FilterQueryFromEvent(ev)
+	go func() {
+		err := i.evm.ListenForLogs(ctx, *q, logch)
+		if err != nil {
+			quitAck <- err
+		}
+	}()
+
+	blks := map[uint64]*block{}
+	var toDelete []cleanup
+
+	for log := range logch {
+		blk, ok := blks[log.BlockNumber]
+		if !ok {
+			t, err := i.evm.BlockTime(big.NewInt(int64(log.BlockNumber)))
+			if err != nil {
+				return err
+			}
+
+			blk = &block{Number: log.BlockNumber, Time: t}
+			blks[log.BlockNumber] = blk
+
+			// clean up old blocks
+			for k, v := range toDelete {
+				if v.t < t {
+					delete(blks, v.b)
+					toDelete = comm.Remove(toDelete, k)
+				}
+			}
+
+			// set to cleanup block after 60 seconds
+			toDelete = append(toDelete, cleanup{t: blk.Time + 60, b: blk.Number})
+		}
+
+		err = i.processTransfersFromLogs(ev, blk, txdb, ptdb, []types.Log{log})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (i *Indexer) processTransfersFromLogs(ev *indexer.Event, blk *block, txdb *db.TransferDB, ptdb *db.PushTokenDB, logs []types.Log) error {
+	contractAbi, err := GetContractABI(ev.Standard)
 
 	if len(logs) > 0 {
 		txs, err := parseTransfersFromLogs(i.evm, ev, contractAbi, blk, logs)

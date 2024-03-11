@@ -1,6 +1,7 @@
 package index
 
 import (
+	"context"
 	"errors"
 	"log"
 	"math/big"
@@ -47,14 +48,6 @@ func (i *Indexer) IndexERC20From(contract string, from int64) error {
 		return err
 	}
 
-	ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
-	if !ok {
-		ptdb, err = i.db.AddPushTokenDB(ev.Contract)
-		if err != nil {
-			return err
-		}
-	}
-
 	for curr.Int64() > from {
 		t, err := i.evm.BlockTime(curr)
 		if err != nil {
@@ -63,7 +56,7 @@ func (i *Indexer) IndexERC20From(contract string, from int64) error {
 
 		blk := &block{Number: curr.Uint64(), Time: t}
 
-		err = i.EventsFromBlock(ev, blk, ptdb)
+		err = i.EventsFromBlock(ev, blk)
 		if err != nil {
 			return err
 		}
@@ -122,6 +115,27 @@ func (i *Indexer) Background(syncrate int) error {
 	}
 }
 
+// ListenBackground starts an indexer service that listens for blocks in the background
+func (i *Indexer) ListenBackground(ctx context.Context) error {
+	evs, err := i.db.EventDB.GetEvents()
+	if err != nil {
+		return err
+	}
+
+	quitAck := make(chan error)
+
+	for _, ev := range evs {
+		go func() {
+			err := i.EventsFromLogStream(ctx, quitAck, ev)
+			if err != nil {
+				quitAck <- err
+			}
+		}()
+	}
+
+	return <-quitAck
+}
+
 // Process events
 func (i *Indexer) Process(evs []*indexer.Event, blk *block) error {
 	if len(evs) == 0 {
@@ -133,15 +147,7 @@ func (i *Indexer) Process(evs []*indexer.Event, blk *block) error {
 	for _, ev := range evs {
 		var err error
 
-		ptdb, ok := i.db.GetPushTokenDB(ev.Contract)
-		if !ok {
-			ptdb, err = i.db.AddPushTokenDB(ev.Contract)
-			if err != nil {
-				return err
-			}
-		}
-
-		err = i.EventsFromBlock(ev, blk, ptdb)
+		err = i.EventsFromBlock(ev, blk)
 
 		if err == nil {
 			continue

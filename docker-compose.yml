@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: cw-pass-local
       POSTGRES_USER: cw
     volumes:
-      - ./data:/var/lib/postgresql/data
+      - ./pqdata:/var/lib/postgresql/data
     networks:
       cwnet:
         aliases:

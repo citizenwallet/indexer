@@ -33,6 +33,8 @@ func main() {
 
 	evmtype := flag.String("evm", string(indexer.EVMTypeEthereum), "which evm to use (default: ethereum)")
 
+	dbpath := flag.String("dbpath", ".", "path to db")
+
 	flag.Parse()
 
 	ctx := context.Background()
@@ -101,7 +103,7 @@ func main() {
 
 	log.Default().Println("starting internal db service...")
 
-	d, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost, conf.DBSecret)
+	d, err := db.NewDB(chid, *dbpath, conf.DBSecret)
 	if err != nil {
 		log.Fatal(err)
 	}

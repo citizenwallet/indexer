@@ -21,14 +21,9 @@ type Config struct {
 	PinataBaseURL         string `env:"PINATA_BASE_URL"`
 	PinataAPIKey          string `env:"PINATA_API_KEY"`
 	PinataAPISecret       string `env:"PINATA_API_SECRET"`
-	DBUsername            string `env:"POSTGRES_USER,required"`
-	DBPassword            string `env:"POSTGRES_PASSWORD,required"`
-	DBName                string `env:"POSTGRES_DB,required"`
-	DBHost                string `env:"POSTGRES_HOST,required"`
-	DBReaderHost          string `env:"POSTGRES_READER_HOST,required"`
 	DiscordURL            string `env:"DISCORD_URL,required"`
 	PaymasterKey          string `env:"PAYMASTER_KEY,required"`
-	DBSecret              string `env:"POSTGRES_SECRET,required"`
+	DBSecret              string `env:"DB_SECRET,required"`
 }
 
 func New(ctx context.Context, envpath string) (*Config, error) {

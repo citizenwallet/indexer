@@ -1,6 +1,6 @@
 module github.com/citizenwallet/indexer
 
-go 1.21.6
+go 1.22
 
 require (
 	firebase.google.com/go/v4 v4.12.1
@@ -62,6 +62,7 @@ require (
 	github.com/holiman/uint256 v1.2.3 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect

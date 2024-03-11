@@ -22,10 +22,12 @@ go.work
 
 # env
 .env
-!.env.example
+*.env
+!.example
 
-# postgres
+# db
 data
+pqdata
 
 # firebase
 firebase.json
@@ -35,3 +37,5 @@ __debug_bin*
 
 # ui files
 _ui
+
+binaries

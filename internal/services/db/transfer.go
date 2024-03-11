@@ -123,11 +123,10 @@ func (db *TransferDB) CreateTransferTableIndexes() error {
 // AddTransfer adds a transfer to the db
 func (db *TransferDB) AddTransfer(tx *indexer.Transfer) error {
 
-	// insert transfer on conflict update
+	// insert transfer on conflict do nothing
 	_, err := db.db.Exec(fmt.Sprintf(`
-	INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+	INSERT OR IGNORE INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	ON CONFLICT(hash) DO NOTHING
 	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data, tx.Status)
 
 	return err
@@ -144,20 +143,22 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 	for _, t := range tx {
 		// insert transfer on conflict update
 		_, err := dbtx.Exec(fmt.Sprintf(`
-			INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-			ON CONFLICT(hash) DO UPDATE SET
-				tx_hash = excluded.tx_hash,
-				token_id = excluded.token_id,
-				created_at = excluded.created_at,
-				from_to_addr = excluded.from_to_addr,
-				from_addr = excluded.from_addr,
-				to_addr = excluded.to_addr,
-				nonce = excluded.nonce,
-				value = excluded.value,
-				data = COALESCE(excluded.data, t_transfers_%s.data),
-				status = excluded.status
-			`, db.suffix, db.suffix), t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
+			INSERT OR IGNORE INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+			
+			UPDATE t_transfers_%s
+			SET
+				tx_hash = $2,
+				token_id = $3,
+				created_at = $4,
+				from_to_addr = $5,
+				from_addr = $6,
+				to_addr = $7,
+				nonce = $8,
+				value = $9,
+				data = COALESCE($10, t_transfers_%s.data),
+				status = $11;
+			`, db.suffix, db.suffix, db.suffix), t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
 		if err != nil {
 			return dbtx.Rollback()
 		}
@@ -188,6 +189,7 @@ func (db *TransferDB) SetStatusFromHash(status, hash string) error {
 
 // ReconcileTxHash updates transfers to ensure that there are no duplicates
 func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
+
 	// check if there are multiple transfers with the same tx_hash
 	var count int
 	row := db.rdb.QueryRow(fmt.Sprintf(`
@@ -219,20 +221,21 @@ func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
 
 	// insert the confirmed transfer
 	_, err = db.db.Exec(fmt.Sprintf(`
-	INSERT INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'success')
-	ON CONFLICT (hash) DO UPDATE SET 
-		tx_hash = EXCLUDED.tx_hash,
-		token_id = EXCLUDED.token_id,
-		created_at = EXCLUDED.created_at,
-		from_to_addr = EXCLUDED.from_to_addr,
-		from_addr = EXCLUDED.from_addr,
-		to_addr = EXCLUDED.to_addr,
-		nonce = EXCLUDED.nonce,
-		value = EXCLUDED.value,
-		data = EXCLUDED.data,
-		status = EXCLUDED.status;
-	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data)
+	INSERT OR IGNORE INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'success');
+
+	UPDATE t_transfers_%s SET  
+		tx_hash = $1,
+		token_id = $2,
+		created_at = $3,
+		from_to_addr = $4,
+		from_addr = $5,
+		to_addr = $6,
+		nonce = $7,
+		value = $8,
+		data = $9,
+		status = 'success';
+	`, db.suffix, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data)
 
 	return err
 }
@@ -527,11 +530,15 @@ func (db *TransferDB) UpdateTransfersWithDB(txs []*indexer.Transfer) ([]*indexer
 	}
 
 	rows, err := db.rdb.Query(fmt.Sprintf(`
+		WITH b(hash) AS (
+			VALUES
+			%s
+		)
 		SELECT tx.hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 		FROM t_transfers_%s tx
-		JOIN (values %s) as b(hash)
+		JOIN b 
 		ON tx.hash = b.hash;
-		`, db.suffix, hashStr))
+		`, hashStr, db.suffix))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return txs, nil

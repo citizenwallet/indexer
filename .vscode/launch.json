@@ -19,7 +19,9 @@
         "-sync",
         "1",
         "-fbpath",
-        "../../firebase.json"
+        "../../firebase.json",
+        "-dbpath",
+        "../../"
       ]
     },
     {
@@ -38,7 +40,27 @@
         "-fbpath",
         "../../firebase.json",
         "-evm",
-        "celo"
+        "celo",
+        "-dbpath",
+        "../../"
+      ]
+    },
+    {
+      "name": "Launch WS Node [CELO]",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/node/main.go",
+      "args": [
+        "-env",
+        "../../.env",
+        "-fbpath",
+        "../../firebase.json",
+        "-evm",
+        "celo",
+        "-dbpath",
+        "../../",
+        "-ws"
       ]
     },
     {
@@ -56,7 +78,9 @@
         "1",
         "-onlyApi",
         "-fbpath",
-        "../../firebase.json"
+        "../../firebase.json",
+        "-dbpath",
+        "../../"
       ]
     }
   ]

@@ -47,6 +47,8 @@ func main() {
 
 	env := flag.String("env", ".env", "path to .env file")
 
+	certpath := flag.String("certpath", "./certs", "cert folder path")
+
 	port := flag.Int("port", 3000, "port to listen on")
 
 	sync := flag.Int("sync", 1, "sync from block number (default: 1)")
@@ -64,6 +66,8 @@ func main() {
 	evmtype := flag.String("evm", string(indexer.EVMTypeEthereum), "which evm to use (default: ethereum)")
 
 	fbpath := flag.String("fbpath", "firebase.json", "path to firebase credentials")
+
+	dbpath := flag.String("dbpath", ".", "path to db")
 
 	flag.Parse()
 
@@ -133,7 +137,7 @@ func main() {
 
 	log.Default().Println("starting internal db service...")
 
-	d, err := db.NewDB(chid, conf.DBUsername, conf.DBPassword, conf.DBName, conf.DBHost, conf.DBReaderHost, conf.DBSecret)
+	d, err := db.NewDB(chid, *dbpath, conf.DBSecret)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -144,8 +148,6 @@ func main() {
 	fb := firebase.NewPushService(ctx, *fbpath)
 
 	if !*onlyAPI {
-		log.Default().Println("starting index service...")
-
 		i, err := index.New(*rate, chid, d, evm, fb)
 		if err != nil {
 			log.Fatal(err)
@@ -153,7 +155,13 @@ func main() {
 		defer i.Close()
 
 		go func() {
-			quitAck <- i.Background(*sync)
+			if *ws {
+				log.Default().Println("starting index service in websocket mode...")
+				quitAck <- i.ListenBackground(ctx)
+			} else {
+				log.Default().Println("starting index service...")
+				quitAck <- i.Background(*sync)
+			}
 		}()
 	}
 
@@ -185,7 +193,17 @@ func main() {
 	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, useropq, bu, fb, privateKey)
 
 	go func() {
-		quitAck <- api.Start(*port)
+		handler, err := api.CreateHandler()
+		if err != nil {
+			quitAck <- err
+			return
+		}
+
+		if *port == 443 {
+			quitAck <- api.StartTLS(*certpath, handler)
+			return
+		}
+		quitAck <- api.Start(*port, handler)
 	}()
 
 	log.Default().Println("listening on port: ", *port)

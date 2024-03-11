@@ -145,6 +145,13 @@ func (i *Indexer) EventsFromLogStream(ctx context.Context, quitAck chan error, e
 			toDelete = append(toDelete, cleanup{t: blk.Time + 60, b: blk.Number})
 		}
 
+		// cleanup old pending and sending transfers
+		err = txdb.RemoveOldInProgressTransfers()
+		if err != nil {
+			return err
+		}
+
+		// process transfers
 		err = i.processTransfersFromLogs(ev, blk, txdb, ptdb, []types.Log{log})
 		if err != nil {
 			return err

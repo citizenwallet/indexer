@@ -324,6 +324,17 @@ func (db *TransferDB) RemovePendingTransfer(hash string) error {
 	return err
 }
 
+// RemoveOldInProgressTransfers removes any transfer that is not success or fail from the db
+func (db *TransferDB) RemoveOldInProgressTransfers() error {
+	old := time.Now().UTC().Add(-30 * time.Second)
+
+	_, err := db.db.Exec(fmt.Sprintf(`
+	DELETE FROM t_transfers_%s WHERE created_at <= $1 AND status IN ('sending', 'pending')
+	`, db.suffix), old)
+
+	return err
+}
+
 // GetTransfer returns the transfer for a given hash
 func (db *TransferDB) GetTransfer(hash string) (*indexer.Transfer, error) {
 	var transfer indexer.Transfer

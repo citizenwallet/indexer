@@ -14,10 +14,10 @@
       "args": [
         "-env",
         "../../.env",
-        // "-rate",
-        // "99",
-        // "-sync",
-        // "1",
+        "-rate",
+        "99",
+        "-sync",
+        "1",
         "-fbpath",
         "../../firebase.json"
       ]

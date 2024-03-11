@@ -134,10 +134,10 @@ func (i *Indexer) EventsFromLogStream(ctx context.Context, quitAck chan error, e
 			blks[log.BlockNumber] = blk
 
 			// clean up old blocks
-			for k, v := range toDelete {
+			for _, v := range toDelete {
 				if v.t < t {
 					delete(blks, v.b)
-					toDelete = comm.Remove(toDelete, k)
+					toDelete = comm.Filter(toDelete, func(c cleanup) bool { return c.b != v.b })
 				}
 			}
 

@@ -28,8 +28,9 @@ type UserOpService struct {
 func NewUserOpService(db *db.DB,
 	evm indexer.EVMRequester) *UserOpService {
 	return &UserOpService{
-		db:  db,
-		evm: evm,
+		inProgress: map[common.Address][]string{},
+		db:         db,
+		evm:        evm,
 	}
 }
 

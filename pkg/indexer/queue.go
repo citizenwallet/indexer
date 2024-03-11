@@ -15,11 +15,11 @@ type Message struct {
 }
 
 type UserOpMessage struct {
-	Paymaster common.Address
-	To        common.Address
-	ChainId   *big.Int
-	UserOp    UserOp
-	ExtraData any
+	Paymaster  common.Address
+	EntryPoint common.Address
+	ChainId    *big.Int
+	UserOp     UserOp
+	ExtraData  any
 }
 
 func newMessage(id string, message any) *Message {
@@ -31,13 +31,13 @@ func newMessage(id string, message any) *Message {
 	}
 }
 
-func NewTxMessage(pm, to common.Address, chainId *big.Int, userop UserOp, txdata *TransferData) *Message {
+func NewTxMessage(pm, entrypoint common.Address, chainId *big.Int, userop UserOp, txdata *TransferData) *Message {
 	op := UserOpMessage{
-		Paymaster: pm,
-		To:        to,
-		ChainId:   chainId,
-		UserOp:    userop,
-		ExtraData: txdata,
+		Paymaster:  pm,
+		EntryPoint: entrypoint,
+		ChainId:    chainId,
+		UserOp:     userop,
+		ExtraData:  txdata,
 	}
 	return newMessage(common.Bytes2Hex(userop.Signature), op)
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	comm "github.com/citizenwallet/indexer/internal/common"
@@ -18,15 +19,17 @@ import (
 )
 
 type UserOpService struct {
-	db  *db.DB
-	evm indexer.EVMRequester
+	inProgress map[common.Address][]string
+	mu         sync.Mutex
+	db         *db.DB
+	evm        indexer.EVMRequester
 }
 
 func NewUserOpService(db *db.DB,
 	evm indexer.EVMRequester) *UserOpService {
 	return &UserOpService{
-		db,
-		evm,
+		db:  db,
+		evm: evm,
 	}
 }
 
@@ -38,7 +41,7 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 	messagesByEntryPoint := map[common.Address][]indexer.Message{}
 	txmByEntryPoint := map[common.Address][]indexer.UserOpMessage{}
 
-	// first organize messages by txm.To
+	// first organize messages by txm.EntryPoint
 	for _, message := range messages {
 		// Type assertion to check if the msgs... is of type indexer.UserOpMessage
 		txm, ok := message.Message.(indexer.UserOpMessage)
@@ -49,14 +52,14 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			continue
 		}
 
-		messagesByEntryPoint[txm.To] = append(messagesByEntryPoint[txm.To], message)
-		txmByEntryPoint[txm.To] = append(txmByEntryPoint[txm.To], txm)
+		messagesByEntryPoint[txm.EntryPoint] = append(messagesByEntryPoint[txm.EntryPoint], message)
+		txmByEntryPoint[txm.EntryPoint] = append(txmByEntryPoint[txm.EntryPoint], txm)
 	}
 
 	// go through each entry point and process the messages
-	for to, txms := range txmByEntryPoint {
+	for entrypoint, txms := range txmByEntryPoint {
 		sampleTxm := txms[0] // use the first txm to get information we need to process the messages
-		msgs := messagesByEntryPoint[to]
+		msgs := messagesByEntryPoint[entrypoint]
 
 		// Fetch the sponsor's corresponding private key from the database
 		sponsorKey, err := s.db.SponsorDB.GetSponsor(sampleTxm.Paymaster.Hex())
@@ -96,6 +99,10 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			continue
 		}
 
+		// Get the in progress transactions for the entrypoint and increment the nonce
+		inProgress := s.inProgress[entrypoint]
+		nonce += uint64(len(inProgress))
+
 		// Parse the contract ABI
 		parsedABI, err := tokenEntryPoint.TokenEntryPointMetaData.GetAbi()
 		if err != nil {
@@ -113,7 +120,7 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 		}
 
 		// Pack the function name and arguments into calldata
-		data, err := parsedABI.Pack("handleOps", ops, sampleTxm.To)
+		data, err := parsedABI.Pack("handleOps", ops, sampleTxm.EntryPoint)
 		if err != nil {
 			invalid = append(invalid, msgs...)
 			for range msgs {
@@ -123,7 +130,7 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 		}
 
 		// Create a new transaction
-		tx, err := s.evm.NewTx(nonce, sponsor, sampleTxm.To, data)
+		tx, err := s.evm.NewTx(nonce, sponsor, sampleTxm.EntryPoint, data)
 		if err != nil {
 			invalid = append(invalid, msgs...)
 			for range msgs {
@@ -141,6 +148,13 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			}
 			continue
 		}
+
+		signedTxHash := signedTx.Hash().Hex()
+
+		// update inProgress
+		s.mu.Lock()
+		s.inProgress[entrypoint] = append(s.inProgress[entrypoint], signedTxHash)
+		s.mu.Unlock()
 
 		insertedTransfers := map[common.Address][]string{}
 
@@ -163,8 +177,8 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 				// If the parsing is successful, this is an ERC20 transfer
 				// Create a new transfer log
 				log = &indexer.Transfer{
-					Hash:      signedTx.Hash().Hex(),
-					TxHash:    signedTx.Hash().Hex(),
+					Hash:      signedTxHash,
+					TxHash:    signedTxHash,
 					TokenID:   0,
 					CreatedAt: time.Now(),
 					From:      userop.Sender.Hex(),
@@ -209,6 +223,13 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 				for range msgs {
 					errors = append(errors, err)
 				}
+
+				// remove from inProgress
+				s.mu.Lock()
+				s.inProgress[entrypoint] = comm.Filter(s.inProgress[entrypoint], func(s string) bool {
+					return s != signedTxHash
+				})
+				s.mu.Unlock()
 				continue
 			}
 
@@ -227,6 +248,13 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 				for range msgs {
 					errors = append(errors, err)
 				}
+
+				// remove from inProgress
+				s.mu.Lock()
+				s.inProgress[entrypoint] = comm.Filter(s.inProgress[entrypoint], func(s string) bool {
+					return s != signedTxHash
+				})
+				s.mu.Unlock()
 				continue
 			}
 
@@ -244,6 +272,13 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			for range msgs {
 				errors = append(errors, err)
 			}
+
+			// remove from inProgress
+			s.mu.Lock()
+			s.inProgress[entrypoint] = comm.Filter(s.inProgress[entrypoint], func(s string) bool {
+				return s != signedTxHash
+			})
+			s.mu.Unlock()
 			continue
 		}
 
@@ -259,18 +294,27 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			}
 		}
 
-		// async wait for the transaction to be mined
-		err = s.evm.WaitForTx(signedTx) // if we want to make this non-blocking, we need to store and manually increment the nonce
-		if err != nil {
-			for dest, hashes := range insertedTransfers {
-				tdb, ok := s.db.TransferDB[s.db.TransferName(dest.Hex())]
-				if ok {
-					for _, hash := range hashes {
-						tdb.RemoveTransfer(hash)
+		go func() {
+			// async wait for the transaction to be mined
+			err = s.evm.WaitForTx(signedTx)
+			if err != nil {
+				for dest, hashes := range insertedTransfers {
+					tdb, ok := s.db.TransferDB[s.db.TransferName(dest.Hex())]
+					if ok {
+						for _, hash := range hashes {
+							tdb.RemoveTransfer(hash)
+						}
 					}
 				}
 			}
-		}
+
+			// remove from inProgress
+			s.mu.Lock()
+			s.inProgress[entrypoint] = comm.Filter(s.inProgress[entrypoint], func(s string) bool {
+				return s != signedTxHash
+			})
+			s.mu.Unlock()
+		}()
 	}
 
 	return invalid, errors

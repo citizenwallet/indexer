@@ -181,7 +181,7 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 					Hash:      signedTxHash,
 					TxHash:    signedTxHash,
 					TokenID:   0,
-					CreatedAt: time.Now(),
+					CreatedAt: time.Now().UTC(),
 					From:      userop.Sender.Hex(),
 					To:        toaddr.Hex(),
 					Nonce:     userop.Nonce.Int64(),

@@ -145,9 +145,8 @@ func NewDB(chainID *big.Int, basePath, secret string) (*DB, error) {
 	}
 
 	for _, ev := range evs {
-		name, flag := d.TransferName(ev.Contract)
-		if flag {
-			err := errors.New("Bad contract address")
+		name, err := d.TableNameSuffix(ev.Contract)
+		if err != nil {
 			return nil, err
 		}
 
@@ -288,21 +287,23 @@ func (db *DB) PushTokenTableExists(suffix string) (bool, error) {
 	return true, nil
 }
 
-// TransferName returns the name of the transfer db for the given contract
-func (d *DB) TransferName(contract string) (string, bool) {
+// TableNameSuffix returns the name of the transfer db for the given contract
+func (d *DB) TableNameSuffix(contract string) (string, error) {
 	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
-
-	flag := !re.MatchString(contract)
 
 	suffix := fmt.Sprintf("%v_%s", d.chainID, strings.ToLower(contract))
 
-	return suffix, flag
+	if !re.MatchString(contract) {
+		return suffix, errors.New("bad contract address")
+	}
+
+	return suffix, nil
 }
 
 // GetTransferDB returns true if the transfer db for the given contract exists, returns the db if it exists
 func (d *DB) GetTransferDB(contract string) (*TransferDB, bool) {
-	name, flag := d.TransferName(contract)
-	if flag {
+	name, err := d.TableNameSuffix(contract)
+	if err != nil {
 		return nil, false
 	}
 
@@ -317,8 +318,8 @@ func (d *DB) GetTransferDB(contract string) (*TransferDB, bool) {
 
 // GetPushTokenDB returns true if the push token db for the given contract exists, returns the db if it exists
 func (d *DB) GetPushTokenDB(contract string) (*PushTokenDB, bool) {
-	name, flag := d.TransferName(contract)
-	if flag {
+	name, err := d.TableNameSuffix(contract)
+	if err != nil {
 		return nil, false
 	}
 
@@ -333,9 +334,8 @@ func (d *DB) GetPushTokenDB(contract string) (*PushTokenDB, bool) {
 
 // AddTransferDB adds a new transfer db for the given contract
 func (d *DB) AddTransferDB(contract string) (*TransferDB, error) {
-	name, flag := d.TransferName(contract)
-	if flag {
-		err := errors.New("Bad contract address")
+	name, err := d.TableNameSuffix(contract)
+	if err != nil {
 		return nil, err
 	}
 
@@ -354,9 +354,8 @@ func (d *DB) AddTransferDB(contract string) (*TransferDB, error) {
 
 // AddPushTokenDB adds a new push token db for the given contract
 func (d *DB) AddPushTokenDB(contract string) (*PushTokenDB, error) {
-	name, flag := d.TransferName(contract)
-	if flag {
-		err := errors.New("Bad contract address")
+	name, err := d.TableNameSuffix(contract)
+	if err != nil {
 		return nil, err
 	}
 	d.mu.Lock()

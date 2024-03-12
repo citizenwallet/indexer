@@ -66,9 +66,9 @@ func (s *LegacyService) Get(w http.ResponseWriter, r *http.Request) {
 		tokenId = 0
 	}
 
-	name, flag := s.db.TransferName(contractAddr)
-	if flag {
-		w.WriteHeader(http.StatusForbidden)
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -126,9 +126,9 @@ func (s *LegacyService) GetNew(w http.ResponseWriter, r *http.Request) {
 		tokenId = 0
 	}
 
-	name, flag := s.db.TransferName(contractAddr)
-	if flag {
-		w.WriteHeader(http.StatusForbidden)
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -199,9 +199,9 @@ func (s *LegacyService) AddSending(w http.ResponseWriter, r *http.Request) {
 	log.From = common.ChecksumAddress(log.From)
 	log.FromTo = log.CombineFromTo()
 
-	name, flag := s.db.TransferName(contractAddr)
-	if flag {
-		w.WriteHeader(http.StatusForbidden)
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -264,9 +264,9 @@ func (s *LegacyService) SetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name, flag := s.db.TransferName(contractAddr)
-	if flag {
-		w.WriteHeader(http.StatusForbidden)
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 

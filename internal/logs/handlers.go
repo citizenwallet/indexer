@@ -63,9 +63,9 @@ func (s *Service) GetAll(w http.ResponseWriter, r *http.Request) {
 		tokenId = 0
 	}
 
-	name, flag := s.db.TransferName(contractAddr)
-	if flag {
-		w.WriteHeader(http.StatusForbidden)
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -141,9 +141,9 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 		tokenId = 0
 	}
 
-	name, flag := s.db.TransferName(contractAddr)
-	if flag {
-		w.WriteHeader(http.StatusForbidden)
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -201,9 +201,9 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 		tokenId = 0
 	}
 
-	name, flag := s.db.TransferName(contractAddr)
-	if flag {
-		w.WriteHeader(http.StatusForbidden)
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -272,9 +272,9 @@ func (s *Service) AddSending(w http.ResponseWriter, r *http.Request) {
 	log.From = com.ChecksumAddress(log.From)
 	log.FromTo = log.CombineFromTo()
 
-	name, flag := s.db.TransferName(contractAddr)
-	if flag {
-		w.WriteHeader(http.StatusForbidden)
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -340,9 +340,9 @@ func (s *Service) SetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name, flag := s.db.TransferName(contractAddr)
-	if flag {
-		w.WriteHeader(http.StatusForbidden)
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 

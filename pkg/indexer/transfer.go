@@ -82,20 +82,18 @@ func (t *Transfer) CombineFromTo() string {
 	return fmt.Sprintf("%s_%s", t.From, t.To)
 }
 
-// generate hash for transfer using chainID, tokenID, nonce, from, to, value
-func (t *Transfer) GenerateTempHash(chainID int64) {
+// generate hash for transfer using a provided index, from, to and the tx hash
+func (t *Transfer) GenerateUniqueHash() string {
 	buf := new(bytes.Buffer)
 
 	// Write each value to the buffer as bytes
-	binary.Write(buf, binary.BigEndian, chainID)
-	binary.Write(buf, binary.BigEndian, t.TokenID)
-	binary.Write(buf, binary.BigEndian, t.Nonce)
-	buf.Write(common.Hex2Bytes(t.From))
-	buf.Write(common.Hex2Bytes(t.To))
-	buf.Write(t.Value.Bytes())
+	buf.Write(common.FromHex(t.From))
+	buf.Write(common.FromHex(t.To))
+	binary.Write(buf, binary.BigEndian, t.Value)
+	buf.Write(common.FromHex(t.TxHash))
 
 	hash := crypto.Keccak256Hash(buf.Bytes())
-	t.Hash = fmt.Sprintf("%s_%s", TEMP_HASH_PREFIX, hash.Hex())
+	return hash.Hex()
 }
 
 func (t *Transfer) ToRounded(decimals int64) float64 {

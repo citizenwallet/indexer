@@ -13,7 +13,6 @@ import (
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/indexer/pkg/queue"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
-	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -197,20 +196,8 @@ func (s *Service) Send(r *http.Request) (any, int) {
 
 	entryPoint := common.HexToAddress(epAddr)
 
-	// Parse the contract ABI
-	parsedABI, err := tokenEntryPoint.TokenEntryPointMetaData.GetAbi()
-	if err != nil {
-		return nil, http.StatusInternalServerError
-	}
-
-	// Pack the function name and arguments into calldata
-	data, err := parsedABI.Pack("handleOps", []tokenEntryPoint.UserOperation{tokenEntryPoint.UserOperation(userop)}, entryPoint)
-	if err != nil {
-		return nil, http.StatusInternalServerError
-	}
-
 	// Create a new message
-	message := indexer.NewTxMessage(addr, entryPoint, data, s.chainId, userop, txdata)
+	message := indexer.NewTxMessage(addr, entryPoint, s.chainId, userop, txdata)
 
 	// Enqueue the message
 	s.useropq.Enqueue(*message)

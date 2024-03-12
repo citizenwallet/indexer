@@ -176,9 +176,9 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			dest, toaddr, amount, parseErr := comm.ParseERC20Transfer(userop.CallData)
 			if parseErr == nil {
 				// If the parsing is successful, this is an ERC20 transfer
+
 				// Create a new transfer log
 				log = &indexer.Transfer{
-					Hash:      signedTxHash,
 					TxHash:    signedTxHash,
 					TokenID:   0,
 					CreatedAt: time.Now().UTC(),
@@ -189,6 +189,8 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 					Data:      txdata,
 					Status:    indexer.TransferStatusSending,
 				}
+
+				log.Hash = log.GenerateUniqueHash()
 
 				// Combine the From and To addresses into a single string
 				log.FromTo = log.CombineFromTo()

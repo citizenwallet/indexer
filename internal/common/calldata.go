@@ -25,7 +25,7 @@ func ParseERC20Transfer(calldata []byte) (common.Address, common.Address, *big.I
 
 	// The function selector is the first 4 bytes of the calldata
 	funcSelector := calldata[:4]
-	if !bytes.Equal(funcSelector, executeSigSingle) {
+	if !bytes.Equal(funcSelector, executeSigSingle) { // TODO: implement batch execute
 		return common.Address{}, common.Address{}, nil, ErrInvalidCalldata
 	}
 

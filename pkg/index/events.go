@@ -134,10 +134,10 @@ func (i *Indexer) EventsFromLogStream(ctx context.Context, quitAck chan error, e
 			blks[log.BlockNumber] = blk
 
 			// clean up old blocks
-			for k, v := range toDelete {
+			for _, v := range toDelete {
 				if v.t < t {
 					delete(blks, v.b)
-					toDelete = comm.Remove(toDelete, k)
+					toDelete = comm.Filter(toDelete, func(c cleanup) bool { return c.b != v.b })
 				}
 			}
 
@@ -145,7 +145,14 @@ func (i *Indexer) EventsFromLogStream(ctx context.Context, quitAck chan error, e
 			toDelete = append(toDelete, cleanup{t: blk.Time + 60, b: blk.Number})
 		}
 
+		// process transfers
 		err = i.processTransfersFromLogs(ev, blk, txdb, ptdb, []types.Log{log})
+		if err != nil {
+			return err
+		}
+
+		// cleanup old pending and sending transfers
+		err = txdb.RemoveOldInProgressTransfers()
 		if err != nil {
 			return err
 		}

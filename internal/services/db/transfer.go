@@ -142,23 +142,46 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 
 	for _, t := range tx {
 		// insert transfer on conflict update
-		_, err := dbtx.Exec(fmt.Sprintf(`
+		res, err := db.db.Exec(fmt.Sprintf(`
 			INSERT OR IGNORE INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
-			
+			`, db.suffix), t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
+		if err != nil {
+			return dbtx.Rollback()
+		}
+
+		// check if the transfer was inserted or updated
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return dbtx.Rollback()
+		}
+
+		if rows > 0 {
+			// something was inserted, no need to update
+			continue
+		}
+
+		res, err = dbtx.Exec(fmt.Sprintf(`
 			UPDATE t_transfers_%s
 			SET
-				tx_hash = $2,
-				token_id = $3,
-				created_at = $4,
-				from_to_addr = $5,
-				from_addr = $6,
-				to_addr = $7,
-				nonce = $8,
-				value = $9,
-				data = COALESCE($10, t_transfers_%s.data),
-				status = $11;
-			`, db.suffix, db.suffix, db.suffix), t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
+				tx_hash = $1,
+				token_id = $2,
+				created_at = $3,
+				from_to_addr = $4,
+				from_addr = $5,
+				to_addr = $6,
+				nonce = $7,
+				value = $8,
+				data = COALESCE($9, data),
+				status = $10
+			WHERE hash = $11;
+			`, db.suffix), t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status, t.Hash)
+		if err != nil {
+			return dbtx.Rollback()
+		}
+
+		// check if the transfer was inserted or updated
+		rows, err = res.RowsAffected()
 		if err != nil {
 			return dbtx.Rollback()
 		}
@@ -220,10 +243,26 @@ func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
 	}
 
 	// insert the confirmed transfer
-	_, err = db.db.Exec(fmt.Sprintf(`
+	res, err := db.db.Exec(fmt.Sprintf(`
 	INSERT OR IGNORE INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'success');
+	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data)
+	if err != nil {
+		return err
+	}
 
+	// check if the transfer was inserted or updated
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows > 0 {
+		// something was inserted, no need to update
+		return nil
+	}
+
+	_, err = db.db.Exec(fmt.Sprintf(`
 	UPDATE t_transfers_%s SET  
 		tx_hash = $1,
 		token_id = $2,
@@ -234,8 +273,9 @@ func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
 		nonce = $7,
 		value = $8,
 		data = $9,
-		status = 'success';
-	`, db.suffix, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data)
+		status = 'success'
+	WHERE hash = $10;
+	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data, tx.Hash)
 
 	return err
 }
@@ -252,8 +292,8 @@ func (db *TransferDB) SetTxHash(txHash, hash string) error {
 // SetFinalHash sets the hash of a transfer with no tx_hash
 func (db *TransferDB) SetFinalHash(txHash, hash string) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
-	UPDATE t_transfers_%s SET hash = $1, tx_hash = $1 WHERE hash = $2 AND tx_hash = ''
-	`, db.suffix), txHash, hash)
+	UPDATE t_transfers_%s SET hash = $1, tx_hash = $2 WHERE hash = $3 AND tx_hash = ''
+	`, db.suffix), txHash, txHash, hash)
 
 	return err
 }
@@ -320,6 +360,17 @@ func (db *TransferDB) RemovePendingTransfer(hash string) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
 	DELETE FROM t_transfers_%s WHERE hash = $1 AND tx_hash = '' AND status = 'pending'
 	`, db.suffix), hash)
+
+	return err
+}
+
+// RemoveOldInProgressTransfers removes any transfer that is not success or fail from the db
+func (db *TransferDB) RemoveOldInProgressTransfers() error {
+	old := time.Now().UTC().Add(-30 * time.Second)
+
+	_, err := db.db.Exec(fmt.Sprintf(`
+	DELETE FROM t_transfers_%s WHERE created_at <= $1 AND status IN ('sending', 'pending')
+	`, db.suffix), old)
 
 	return err
 }

@@ -26,17 +26,20 @@ func parseERC20Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*inde
 	trsf.From = common.HexToAddress(log.Topics[1].Hex())
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
-	return &indexer.Transfer{
-		Hash:      log.TxHash.Hex(),
+	tx := &indexer.Transfer{
 		TxHash:    log.TxHash.Hex(),
 		TokenID:   0,
 		CreatedAt: blktime,
 		From:      trsf.From.Hex(),
 		To:        trsf.To.Hex(),
-		Nonce:     int64(trsf.Raw.Index),
+		Nonce:     int64(log.Index),
 		Value:     trsf.Value,
 		Status:    indexer.TransferStatusSuccess,
-	}, nil
+	}
+
+	tx.Hash = tx.GenerateUniqueHash()
+
+	return tx, nil
 }
 
 func parseERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*indexer.Transfer, error) {
@@ -50,17 +53,20 @@ func parseERC721Log(blktime time.Time, contractAbi abi.ABI, log types.Log) (*ind
 	trsf.From = common.HexToAddress(log.Topics[1].Hex())
 	trsf.To = common.HexToAddress(log.Topics[2].Hex())
 
-	return &indexer.Transfer{
-		Hash:      log.TxHash.Hex(),
+	tx := &indexer.Transfer{
 		TxHash:    log.TxHash.Hex(),
 		TokenID:   trsf.TokenId.Int64(),
 		CreatedAt: blktime,
 		From:      trsf.From.Hex(),
 		To:        trsf.To.Hex(),
-		Nonce:     int64(trsf.Raw.Index),
+		Nonce:     int64(log.Index),
 		Value:     common.Big1,
 		Status:    indexer.TransferStatusSuccess,
-	}, nil
+	}
+
+	tx.Hash = tx.GenerateUniqueHash()
+
+	return tx, nil
 }
 
 func parseERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]*indexer.Transfer, error) {
@@ -80,17 +86,20 @@ func parseERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]
 		trsf.From = common.HexToAddress(log.Topics[2].Hex())
 		trsf.To = common.HexToAddress(log.Topics[3].Hex())
 
-		txs = append(txs, &indexer.Transfer{
-			Hash:      log.TxHash.Hex(),
+		tx := &indexer.Transfer{
 			TxHash:    log.TxHash.Hex(),
 			TokenID:   trsf.Id.Int64(),
 			CreatedAt: blktime,
 			From:      trsf.From.Hex(),
 			To:        trsf.To.Hex(),
-			Nonce:     int64(trsf.Raw.Index),
+			Nonce:     int64(log.Index),
 			Value:     trsf.Value,
 			Status:    indexer.TransferStatusSuccess,
-		})
+		}
+
+		tx.Hash = tx.GenerateUniqueHash()
+
+		txs = append(txs, tx)
 	case crypto.Keccak256Hash([]byte(sc.ERC1155TransferBatch)).Hex():
 		var trsf erc1155.Erc1155TransferBatch
 
@@ -107,17 +116,20 @@ func parseERC1155Logs(blktime time.Time, contractAbi abi.ABI, log types.Log) ([]
 		trsf.To = common.HexToAddress(log.Topics[3].Hex())
 
 		for i, id := range trsf.Ids {
-			txs = append(txs, &indexer.Transfer{
-				Hash:      log.TxHash.Hex(),
+			tx := &indexer.Transfer{
 				TxHash:    log.TxHash.Hex(),
 				TokenID:   id.Int64(),
 				CreatedAt: blktime,
 				From:      trsf.From.Hex(),
 				To:        trsf.To.Hex(),
-				Nonce:     int64(trsf.Raw.Index),
+				Nonce:     int64(log.Index), // needs to be unique
 				Value:     trsf.Values[i],
 				Status:    indexer.TransferStatusSuccess,
-			})
+			}
+
+			tx.Hash = tx.GenerateUniqueHash()
+
+			txs = append(txs, tx)
 		}
 	default:
 		return nil, errors.New("unknown function signature")

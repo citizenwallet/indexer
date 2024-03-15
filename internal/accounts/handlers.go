@@ -19,6 +19,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/go-chi/chi/v5"
 )
@@ -207,13 +209,46 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	transactor, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
+	// Get the public key from the private key
+	publicKey := privateKey.Public().(*ecdsa.PublicKey)
+
+	// Convert the public key to an Ethereum address
+	sponsor := crypto.PubkeyToAddress(*publicKey)
+
+	// Get the nonce for the sponsor's address
+	nonce, err := s.evm.NonceAt(context.Background(), sponsor, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	tx, err := afcontract.CreateAccount(transactor, owner, common.Big0)
+	// Parse the contract ABI
+	parsedABI, err := accfactory.AccfactoryMetaData.GetAbi()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	data, err := parsedABI.Pack("createAccount", owner, &req.Salt)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Create a new transaction
+	tx, err := s.evm.NewTx(nonce, sponsor, af, data)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	signedTx, err := types.SignTx(tx, types.NewLondonSigner(chainId), privateKey)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = s.evm.SendTransaction(signedTx)
 	if err != nil {
 		e, ok := err.(rpc.Error)
 		if ok && e.ErrorCode() != -32000 {

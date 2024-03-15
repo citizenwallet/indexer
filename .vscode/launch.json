@@ -63,6 +63,22 @@
       ]
     },
     {
+      "name": "Launch WS Node [GNOSIS BREAD]",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/node/main.go",
+      "args": [
+        "-env",
+        "../../.env",
+        "-fbpath",
+        "../../firebase.json",
+        "-dbpath",
+        "../../data/gnosis",
+        "-ws"
+      ]
+    },
+    {
       "name": "Launch API",
       "type": "go",
       "request": "launch",

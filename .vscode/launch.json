@@ -63,7 +63,7 @@
       ]
     },
     {
-      "name": "Launch WS Node [GNOSIS BREAD]",
+      "name": "Launch WS Node [GNOSIS]",
       "type": "go",
       "request": "launch",
       "mode": "auto",

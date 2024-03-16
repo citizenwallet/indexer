@@ -317,7 +317,7 @@ func (d *PostgresDB) Close() error {
 }
 
 // Migrate to Sqlite db
-func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string) error {
+func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int) error {
 	log.Default().Println("starting migration...")
 
 	// instantiate tables
@@ -430,13 +430,12 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string) error {
 		log.Default().Println("migrating transfers")
 
 		// migrate all transfers
-		batchSize = 1000
 		offset = 0
 		for {
 			rows, err := d.rdb.Query(fmt.Sprintf(`
 				SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 				FROM t_transfers_%s ORDER BY created_at LIMIT $1  OFFSET $2
-			`, name), batchSize, offset)
+			`, name), txBatchSize, offset)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -465,13 +464,13 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string) error {
 
 			log.Default().Println("migrated ", count, " transfer events")
 
-			if count < batchSize {
+			if count < txBatchSize {
 				// If we fetched fewer rows than the batch size, we've fetched all rows.
 				break
 			}
 
 			// Increment the offset by batchSize for the next iteration.
-			offset += batchSize
+			offset += txBatchSize
 		}
 	}
 

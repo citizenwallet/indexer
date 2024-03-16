@@ -38,12 +38,12 @@ jobs:
           CGO_ENABLED: 1
         run: |
           go build -v -o binaries/linux_amd64/indexer cmd/node/main.go
-          go build -v -o binaries/linux_amd64/pqmigrator cmd/migrator/main.go
+          go build -v -o binaries/linux_amd64/pgmigrator cmd/migrator/main.go
 
       - name: Make binaries executable
         run: |
           chmod +x binaries/linux_amd64/indexer
-          chmod +x binaries/linux_amd64/pqmigrator
+          chmod +x binaries/linux_amd64/pgmigrator
 
       - name: Install ARM compilation dependencies
         run: sudo apt-get install -y gcc-aarch64-linux-gnu
@@ -57,12 +57,12 @@ jobs:
           CGO_ENABLED: 1
         run: |
           go build -v -o binaries/linux_arm64/indexer cmd/node/main.go
-          go build -v -o binaries/linux_arm64/pqmigrator cmd/migrator/main.go
+          go build -v -o binaries/linux_arm64/pgmigrator cmd/migrator/main.go
 
       - name: Make binaries executable
         run: |
           chmod +x binaries/linux_arm64/indexer
-          chmod +x binaries/linux_arm64/pqmigrator
+          chmod +x binaries/linux_arm64/pgmigrator
 
       - name: Configure Git
         run: |

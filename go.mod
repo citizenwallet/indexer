@@ -1,6 +1,6 @@
 module github.com/citizenwallet/indexer
 
-go 1.22
+go 1.22.1
 
 require (
 	firebase.google.com/go/v4 v4.12.1

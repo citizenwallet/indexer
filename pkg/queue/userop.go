@@ -195,13 +195,16 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 				// Combine the From and To addresses into a single string
 				log.FromTo = log.CombineFromTo()
 
-				// Get the transfer database for the destination address
-				tdb, ok = s.db.TransferDB[s.db.TransferName(dest.Hex())]
-				if ok {
-					// If the transfer database exists, add the transfer log to it
-					tdb.AddTransfer(log)
+				suffix, err := s.db.TableNameSuffix(dest.Hex())
+				if err == nil {
+					// Get the transfer database for the destination address
+					tdb, ok = s.db.TransferDB[suffix]
+					if ok {
+						// If the transfer database exists, add the transfer log to it
+						tdb.AddTransfer(log)
 
-					insertedTransfers[dest] = append(insertedTransfers[dest], log.Hash)
+						insertedTransfers[dest] = append(insertedTransfers[dest], log.Hash)
+					}
 				}
 			}
 		}
@@ -214,10 +217,13 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			if ok && e.ErrorCode() != -32000 {
 				// If it's an RPC error and the error code is not -32000, remove the sending transfer and return the error
 				for dest, hashes := range insertedTransfers {
-					tdb, ok := s.db.TransferDB[s.db.TransferName(dest.Hex())]
-					if ok {
-						for _, hash := range hashes {
-							tdb.RemoveTransfer(hash)
+					suffix, err := s.db.TableNameSuffix(dest.Hex())
+					if err == nil {
+						tdb, ok := s.db.TransferDB[suffix]
+						if ok {
+							for _, hash := range hashes {
+								tdb.RemoveTransfer(hash)
+							}
 						}
 					}
 				}
@@ -239,10 +245,13 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			if !strings.Contains(e.Error(), "insufficient funds") {
 				// If the error is not about insufficient funds, remove the sending transfer and return the error
 				for dest, hashes := range insertedTransfers {
-					tdb, ok := s.db.TransferDB[s.db.TransferName(dest.Hex())]
-					if ok {
-						for _, hash := range hashes {
-							tdb.SetStatus(hash, string(indexer.TransferStatusFail))
+					suffix, err := s.db.TableNameSuffix(dest.Hex())
+					if err == nil {
+						tdb, ok := s.db.TransferDB[suffix]
+						if ok {
+							for _, hash := range hashes {
+								tdb.SetStatus(hash, string(indexer.TransferStatusFail))
+							}
 						}
 					}
 				}
@@ -262,10 +271,14 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			}
 
 			for dest, hashes := range insertedTransfers {
-				tdb, ok := s.db.TransferDB[s.db.TransferName(dest.Hex())]
-				if ok {
-					for _, hash := range hashes {
-						tdb.SetStatus(hash, string(indexer.TransferStatusFail))
+				suffix, err := s.db.TableNameSuffix(dest.Hex())
+				if err == nil {
+					tdb, ok := s.db.TransferDB[suffix]
+
+					if ok {
+						for _, hash := range hashes {
+							tdb.SetStatus(hash, string(indexer.TransferStatusFail))
+						}
 					}
 				}
 			}
@@ -286,12 +299,15 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 		}
 
 		for dest, hashes := range insertedTransfers {
-			tdb, ok := s.db.TransferDB[s.db.TransferName(dest.Hex())]
-			if ok {
-				for _, hash := range hashes {
-					err := tdb.SetStatus(hash, string(indexer.TransferStatusPending))
-					if err != nil {
-						tdb.RemoveTransfer(hash)
+			suffix, err := s.db.TableNameSuffix(dest.Hex())
+			if err == nil {
+				tdb, ok := s.db.TransferDB[suffix]
+				if ok {
+					for _, hash := range hashes {
+						err := tdb.SetStatus(hash, string(indexer.TransferStatusPending))
+						if err != nil {
+							tdb.RemoveTransfer(hash)
+						}
 					}
 				}
 			}
@@ -302,10 +318,13 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			err = s.evm.WaitForTx(signedTx)
 			if err != nil {
 				for dest, hashes := range insertedTransfers {
-					tdb, ok := s.db.TransferDB[s.db.TransferName(dest.Hex())]
-					if ok {
-						for _, hash := range hashes {
-							tdb.RemoveTransfer(hash)
+					suffix, err := s.db.TableNameSuffix(dest.Hex())
+					if err == nil {
+						tdb, ok := s.db.TransferDB[suffix]
+						if ok {
+							for _, hash := range hashes {
+								tdb.RemoveTransfer(hash)
+							}
 						}
 					}
 				}

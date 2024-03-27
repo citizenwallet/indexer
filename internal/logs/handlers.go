@@ -63,7 +63,13 @@ func (s *Service) GetAll(w http.ResponseWriter, r *http.Request) {
 		tokenId = 0
 	}
 
-	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -135,7 +141,13 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 		tokenId = 0
 	}
 
-	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -189,7 +201,13 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 		tokenId = 0
 	}
 
-	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -254,7 +272,13 @@ func (s *Service) AddSending(w http.ResponseWriter, r *http.Request) {
 	log.From = com.ChecksumAddress(log.From)
 	log.FromTo = log.CombineFromTo()
 
-	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -316,7 +340,13 @@ func (s *Service) SetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return

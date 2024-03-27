@@ -31,7 +31,12 @@ func (s *Service) AddEvent(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	// check whether event already exists
-	name := s.db.TransferName(ev.Contract)
+	name, err := s.db.TableNameSuffix(ev.Contract)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	exists, err := s.db.TransferTableExists(name)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

@@ -1,7 +1,6 @@
 package router
 
 import (
-	"crypto/ecdsa"
 	"crypto/tls"
 	"fmt"
 	"math/big"
@@ -26,20 +25,19 @@ import (
 )
 
 type Router struct {
-	chainId      *big.Int
-	apiKey       string
-	epAddr       string
-	accFactAddr  string
-	prfAddr      string
-	evm          indexer.EVMRequester
-	db           *db.DB
-	useropq      *queue.Service
-	b            *bucket.Bucket
-	firebase     *firebase.PushService
-	paymasterKey *ecdsa.PrivateKey
+	chainId     *big.Int
+	apiKey      string
+	epAddr      string
+	accFactAddr string
+	prfAddr     string
+	evm         indexer.EVMRequester
+	db          *db.DB
+	useropq     *queue.Service
+	b           *bucket.Bucket
+	firebase    *firebase.PushService
 }
 
-func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm indexer.EVMRequester, db *db.DB, useropq *queue.Service, b *bucket.Bucket, firebase *firebase.PushService, pk *ecdsa.PrivateKey) *Router {
+func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm indexer.EVMRequester, db *db.DB, useropq *queue.Service, b *bucket.Bucket, firebase *firebase.PushService) *Router {
 	return &Router{
 		chainId,
 		apiKey,
@@ -51,7 +49,6 @@ func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr str
 		useropq,
 		b,
 		firebase,
-		pk,
 	}
 }
 
@@ -78,7 +75,7 @@ func (r *Router) CreateHandler() (http.Handler, error) {
 	ev := events.NewService(r.db)
 	pr := profiles.NewService(r.b, r.evm, comm)
 	pu := push.NewService(r.db, comm)
-	acc := accounts.NewService(r.evm, r.accFactAddr, r.db, r.paymasterKey)
+	acc := accounts.NewService(r.evm, r.accFactAddr, r.db)
 
 	pm := paymaster.NewService(r.evm, r.db)
 	uop := userop.NewService(r.evm, r.db, r.useropq, r.chainId)

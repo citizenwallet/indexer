@@ -21,6 +21,8 @@ func main() {
 
 	env := flag.String("env", "", "path to .env file")
 
+	confpath := flag.String("confpath", "./config", "path to config file")
+
 	contract := flag.String("contract", "", "contract address to sync")
 
 	startBlk := flag.Int64("start", 0, "which block to start from")
@@ -39,7 +41,7 @@ func main() {
 
 	ctx := context.Background()
 
-	conf, err := config.New(ctx, *env)
+	conf, err := config.New(ctx, *env, *confpath)
 	if err != nil {
 		log.Fatal(err)
 	}

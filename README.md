@@ -107,7 +107,7 @@ Syncing is done by standards, querying is done by event types on contracts. ERC2
 
 Fetch all logs before a given maxDate with a limit and offset.
 
-`[GET] /logs/transfers/{contract_address}/{address}?maxDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10&offset=0`
+`[GET] /logs/v2/transfers/{contract_address}/{address}?maxDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10&offset=0`
 
 URL params
 
@@ -127,7 +127,7 @@ Query params
 
 Fetch all new logs after a give fromDate with a limit
 
-`[GET] /logs/transfers/{contract_address}/{address}/new?fromDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10`
+`[GET] /logs/v2/transfers/{contract_address}/{address}/new?fromDate=2023-06-14T21%3A46%3A25%2B02%3A00&limit=10`
 
 URL params
 
@@ -161,55 +161,6 @@ Body
     "version": 2
 }
 ```
-
-### Add a "sending" Log [Protected]
-
-Add a new log to the indexer of a transaction that was submitted but is not yet on chain.
-
-`[POST] /logs/transfers/{contract_address}/{address}`
-
-URL params
-
-`{contract_address}`: the address of the token contract you would like to query.
-
-`{address}`: the address of the "to" or "from" from an event log.
-
-Headers
-
-`X-Signature` & `X-Address`
-
-Body
-
-```
-{
-    "data": data, // base64 encoded data
-    "encoding": "base64", // how is the data encoded
-    "expiry": expiry,
-    "version": 2
-}
-```
-
-Data
-
-`indexer.Transfer`
-
-### Set a "sending" Log to "pending" [Protected]
-
-Update an existing log to "pending" indicating that a user op was submitted.
-
-`[POST] /logs/transfers/{contract_address}/{address}/{hash}`
-
-URL params
-
-`{contract_address}`: the address of the token contract you would like to query.
-
-`{address}`: the address of the "to" or "from" from an event log.
-
-`{hash}`: the user op hash of this event log.
-
-Headers
-
-`X-Signature` & `X-Address`
 
 ### Events [Protected]
 

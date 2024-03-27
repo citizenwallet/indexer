@@ -30,15 +30,13 @@ type Service struct {
 
 	accountFactory common.Address
 	db             *db.DB
-	paymasterKey   *ecdsa.PrivateKey
 }
 
-func NewService(evm indexer.EVMRequester, accountFactory string, db *db.DB, paymasterKey *ecdsa.PrivateKey) *Service {
+func NewService(evm indexer.EVMRequester, accountFactory string, db *db.DB) *Service {
 	return &Service{
 		evm:            evm,
 		accountFactory: common.HexToAddress(accountFactory),
 		db:             db,
-		paymasterKey:   paymasterKey,
 	}
 }
 
@@ -179,7 +177,10 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// legacy account with a token entrypoint
-		privateKey = s.paymasterKey
+		// A hard migration was conducted in November 2023 for all accounts to have a token entrypoint
+		// this allows for 4337 transactions without the need for a full node
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 
 	} else {
 		tepContract, err := tokenEntryPoint.NewTokenEntryPoint(tep, s.evm.Backend())

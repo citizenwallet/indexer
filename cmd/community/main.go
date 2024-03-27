@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
 	"flag"
 	"log"
 	"time"
@@ -20,7 +19,6 @@ import (
 	"github.com/citizenwallet/indexer/pkg/queue"
 	"github.com/citizenwallet/indexer/pkg/router"
 	"github.com/citizenwallet/indexer/pkg/wallet"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -48,6 +46,8 @@ func main() {
 
 	env := flag.String("env", ".env", "path to .env file")
 
+	confpath := flag.String("confpath", "./config", "path to config file")
+
 	port := flag.Int("port", 3000, "port to listen on")
 
 	certpath := flag.String("certpath", "./certs", "cert folder path")
@@ -74,7 +74,7 @@ func main() {
 
 	ctx := context.Background()
 
-	conf, err := config.New(ctx, *env)
+	conf, err := config.New(ctx, *env, *confpath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -166,17 +166,6 @@ func main() {
 
 	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret)
 
-	pkBytes, err := hex.DecodeString(conf.PaymasterKey)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Generate ecdsa.PrivateKey from bytes
-	privateKey, err := crypto.ToECDSA(pkBytes)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName, *notify)
 
 	op := queue.NewUserOpService(d, evm)
@@ -187,7 +176,7 @@ func main() {
 		quitAck <- useropq.Start(op)
 	}()
 
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, useropq, bu, fb, privateKey)
+	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, useropq, bu, fb)
 
 	go func() {
 		handler, err := api.CreateHandler()

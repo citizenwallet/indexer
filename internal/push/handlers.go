@@ -64,7 +64,11 @@ func (s *Service) AddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tname := s.db.TransferName(contractAddr)
+	tname, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
 	pdb, ok := s.db.PushTokenDB[tname]
 	if !ok {
@@ -115,7 +119,11 @@ func (s *Service) RemoveAccountToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tname := s.db.TransferName(contractAddr)
+	tname, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
 	pdb, ok := s.db.PushTokenDB[tname]
 	if !ok {
@@ -123,7 +131,7 @@ func (s *Service) RemoveAccountToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := pdb.RemoveAccountPushToken(token, accaddr)
+	err = pdb.RemoveAccountPushToken(token, accaddr)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

@@ -66,7 +66,13 @@ func (s *LegacyService) Get(w http.ResponseWriter, r *http.Request) {
 		tokenId = 0
 	}
 
-	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -120,7 +126,13 @@ func (s *LegacyService) GetNew(w http.ResponseWriter, r *http.Request) {
 		tokenId = 0
 	}
 
-	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -187,7 +199,13 @@ func (s *LegacyService) AddSending(w http.ResponseWriter, r *http.Request) {
 	log.From = common.ChecksumAddress(log.From)
 	log.FromTo = log.CombineFromTo()
 
-	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -246,7 +264,13 @@ func (s *LegacyService) SetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb, ok := s.db.TransferDB[s.db.TransferName(contractAddr)]
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return

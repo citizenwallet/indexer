@@ -2,9 +2,11 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -91,7 +93,11 @@ func NewPostgresDB(chainID *big.Int, username, password, name, host, rhost, secr
 	}
 
 	for _, ev := range evs {
-		name := pdb.TransferName(ev.Contract)
+		name, err := pdb.TableNameSuffix(ev.Contract)
+		if err != nil {
+			return nil, err
+		}
+
 		log.Default().Println("creating transfer db for: ", name)
 
 		txdb[name], err = NewTransferDB(db, db, name)
@@ -225,14 +231,25 @@ func (db *PostgresDB) PushTokenTableExists(suffix string) (bool, error) {
 	return exists, nil
 }
 
-// TransferName returns the name of the transfer db for the given contract
-func (d *PostgresDB) TransferName(contract string) string {
-	return fmt.Sprintf("%v_%s", d.chainID, strings.ToLower(contract))
+// TableNameSuffix returns the name of the transfer db for the given contract
+func (d *PostgresDB) TableNameSuffix(contract string) (string, error) {
+	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
+
+	suffix := fmt.Sprintf("%v_%s", d.chainID, strings.ToLower(contract))
+
+	if !re.MatchString(contract) {
+		return suffix, errors.New("bad contract address")
+	}
+
+	return suffix, nil
 }
 
 // GetTransferDB returns true if the transfer db for the given contract exists, returns the db if it exists
 func (d *PostgresDB) GetTransferDB(contract string) (*TransferDB, bool) {
-	name := d.TransferName(contract)
+	name, err := d.TableNameSuffix(contract)
+	if err != nil {
+		return nil, false
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	txdb, ok := d.TransferDB[name]
@@ -244,7 +261,11 @@ func (d *PostgresDB) GetTransferDB(contract string) (*TransferDB, bool) {
 
 // GetPushTokenDB returns true if the push token db for the given contract exists, returns the db if it exists
 func (d *PostgresDB) GetPushTokenDB(contract string) (*PushTokenDB, bool) {
-	name := d.TransferName(contract)
+	name, err := d.TableNameSuffix(contract)
+	if err != nil {
+		return nil, false
+	}
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	ptdb, ok := d.PushTokenDB[name]
@@ -256,7 +277,10 @@ func (d *PostgresDB) GetPushTokenDB(contract string) (*PushTokenDB, bool) {
 
 // AddTransferDB adds a new transfer db for the given contract
 func (d *PostgresDB) AddTransferDB(contract string) (*TransferDB, error) {
-	name := d.TransferName(contract)
+	name, err := d.TableNameSuffix(contract)
+	if err != nil {
+		return nil, err
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if txdb, ok := d.TransferDB[name]; ok {
@@ -272,7 +296,10 @@ func (d *PostgresDB) AddTransferDB(contract string) (*TransferDB, error) {
 
 // AddPushTokenDB adds a new push token db for the given contract
 func (d *PostgresDB) AddPushTokenDB(contract string) (*PushTokenDB, error) {
-	name := d.TransferName(contract)
+	name, err := d.TableNameSuffix(contract)
+	if err != nil {
+		return nil, err
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if ptdb, ok := d.PushTokenDB[name]; ok {
@@ -321,7 +348,10 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 	log.Default().Println("starting migration...")
 
 	// instantiate tables
-	name := d.TransferName(token)
+	name, err := d.TableNameSuffix(token)
+	if err != nil {
+		return err
+	}
 
 	pushDB, exists := sqdb.GetPushTokenDB(token)
 	if !exists {

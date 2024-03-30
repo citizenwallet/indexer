@@ -87,7 +87,7 @@ jobs:
           aws-region: eu-west-1
 
       - name: Upload outputs to S3
-        run: aws s3 sync ./build/outputs s3://cw-build-artifacts/indexer
+        run: aws s3 sync ./outputs s3://cw-build-artifacts/indexer
 
       - name: Notify of successful web deploy
         run: |

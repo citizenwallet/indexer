@@ -18,7 +18,6 @@ type Config struct {
 	RPCWSURL              string `env:"RPC_WS_URL,default=ws://localhost:8545"`
 	EntryPointAddress     string
 	AccountFactoryAddress string
-	BundlerOriginHeader   string `env:"ERC4337_ORIGIN_HEADER,required"`
 	ProfileAddress        string
 	APIKEY                string
 	SentryURL             string `env:"SENTRY_URL"`

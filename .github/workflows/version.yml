@@ -16,6 +16,11 @@ jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v5
+        with:
+          go-version: ^1.22
+
       - name: Checkout
         uses: actions/checkout@v3
 
@@ -35,10 +40,59 @@ jobs:
           tag: ${{ steps.bump-semver.outputs.new_version }}
           message: "[tagged] ${{ steps.bump-semver.outputs.new_version }}"
 
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build for Linux amd64
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 1
+        run: |
+          go build -v -o 'outputs/indexer_linux_amd64_${{ steps.bump-semver.outputs.new_version }}' cmd/node/main.go
+          go build -v -o 'outputs/pgmigrator_linux_amd64_${{ steps.bump-semver.outputs.new_version }}' cmd/migrator/main.go
+
+      - name: Make binaries executable
+        run: |
+          chmod +x 'indexer_linux_amd64_${{ steps.bump-semver.outputs.new_version }}'
+          chmod +x 'pgmigrator_linux_amd64_${{ steps.bump-semver.outputs.new_version }}'
+
+      - name: Install ARM compilation dependencies
+        run: sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build for Linux arm64
+        env:
+          CC: aarch64-linux-gnu-gcc
+          CXX: aarch64-linux-gnu-g++
+          GOOS: linux
+          GOARCH: arm64
+          CGO_ENABLED: 1
+        run: |
+          go build -v -o 'outputs/indexer_linux_arm64_${{ steps.bump-semver.outputs.new_version }}' cmd/node/main.go
+          go build -v -o 'outputs/pgmigrator_linux_arm64_${{ steps.bump-semver.outputs.new_version }}' cmd/migrator/main.go
+
+      - name: Make binaries executable
+        run: |
+          chmod +x 'outputs/indexer_linux_arm64_${{ steps.bump-semver.outputs.new_version }}'
+          chmod +x 'outputs/pgmigrator_linux_arm64_${{ steps.bump-semver.outputs.new_version }}'
+
+      - name: Create version file
+        run: echo '${{ steps.bump-semver.outputs.new_version }}' > outputs/version
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Upload outputs to S3
+        run: aws s3 sync ./build/outputs s3://cw-build-artifacts/indexer
+
       - name: Notify of successful web deploy
         run: |
           curl --location '${{ secrets.DISCORD_WEBHOOK_URL }}' \
           --header 'Content-Type: application/json' \
           --data '{
-              "content": "new binaries available: ${{ steps.bump-semver.outputs.new_version }}\n\n download for arm64: \n `curl -L https://github.com/citizenwallet/indexer/raw/${{ steps.bump-semver.outputs.new_version }}/binaries/linux_arm64/indexer -o indexer && chmod +x indexer`\n\n download for amd64: \n `curl -L https://github.com/citizenwallet/indexer/raw/${{ steps.bump-semver.outputs.new_version }}/binaries/linux_amd64/indexer -o indexer && chmod +x indexer`"
+              "content": "new binaries available: ${{ steps.bump-semver.outputs.new_version }}\n\n download for arm64: \n `curl -L https://builds.internal.citizenwallet.xyz/indexer/indexer_linux_arm64_${{ steps.bump-semver.outputs.new_version }} -o indexer && chmod +x indexer`\n\n download for amd64: \n `curl -L https://builds.internal.citizenwallet.xyz/indexer/indexer_linux_amd64_${{ steps.bump-semver.outputs.new_version }} -o indexer && chmod +x indexer`"
           }'

@@ -89,6 +89,9 @@ jobs:
       - name: Upload outputs to S3
         run: aws s3 sync ./outputs s3://cw-build-artifacts/indexer
 
+      - name: Invalidate Build Outputs CloudFront cache
+        run: aws cloudfront create-invalidation --distribution-id EKM5NR0TASZ5T --paths '/*'
+
       - name: Notify of successful web deploy
         run: |
           curl --location '${{ secrets.DISCORD_WEBHOOK_URL }}' \

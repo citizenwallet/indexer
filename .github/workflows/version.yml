@@ -54,8 +54,8 @@ jobs:
 
       - name: Make binaries executable
         run: |
-          chmod +x 'indexer_linux_amd64_${{ steps.bump-semver.outputs.new_version }}'
-          chmod +x 'pgmigrator_linux_amd64_${{ steps.bump-semver.outputs.new_version }}'
+          chmod +x 'outputs/indexer_linux_amd64_${{ steps.bump-semver.outputs.new_version }}'
+          chmod +x 'outputs/pgmigrator_linux_amd64_${{ steps.bump-semver.outputs.new_version }}'
 
       - name: Install ARM compilation dependencies
         run: sudo apt-get install -y gcc-aarch64-linux-gnu

@@ -7,7 +7,6 @@ import (
 
 	com "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/internal/services/bucket"
-	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/profile"
 
@@ -16,16 +15,14 @@ import (
 )
 
 type Service struct {
-	b    *bucket.Bucket
-	evm  indexer.EVMRequester
-	comm *ethrequest.Community
+	b   *bucket.Bucket
+	evm indexer.EVMRequester
 }
 
-func NewService(b *bucket.Bucket, evm indexer.EVMRequester, comm *ethrequest.Community) *Service {
+func NewService(b *bucket.Bucket, evm indexer.EVMRequester) *Service {
 	return &Service{
-		b:    b,
-		evm:  evm,
-		comm: comm,
+		b:   b,
+		evm: evm,
 	}
 }
 

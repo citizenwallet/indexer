@@ -6,21 +6,18 @@ import (
 
 	com "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/internal/services/db"
-	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/chi/v5"
 )
 
 type Service struct {
-	db   *db.DB
-	comm *ethrequest.Community
+	db *db.DB
 }
 
-func NewService(db *db.DB, comm *ethrequest.Community) *Service {
+func NewService(db *db.DB) *Service {
 	return &Service{
-		db:   db,
-		comm: comm,
+		db: db,
 	}
 }
 

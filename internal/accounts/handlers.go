@@ -28,15 +28,13 @@ import (
 type Service struct {
 	evm indexer.EVMRequester
 
-	accountFactory common.Address
-	db             *db.DB
+	db *db.DB
 }
 
-func NewService(evm indexer.EVMRequester, accountFactory string, db *db.DB) *Service {
+func NewService(evm indexer.EVMRequester, db *db.DB) *Service {
 	return &Service{
-		evm:            evm,
-		accountFactory: common.HexToAddress(accountFactory),
-		db:             db,
+		evm: evm,
+		db:  db,
 	}
 }
 

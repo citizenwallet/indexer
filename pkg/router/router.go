@@ -15,7 +15,6 @@ import (
 	"github.com/citizenwallet/indexer/internal/push"
 	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/db"
-	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/internal/userop"
 	"github.com/citizenwallet/indexer/pkg/indexer"
@@ -25,25 +24,17 @@ import (
 )
 
 type Router struct {
-	chainId     *big.Int
-	apiKey      string
-	epAddr      string
-	accFactAddr string
-	prfAddr     string
-	evm         indexer.EVMRequester
-	db          *db.DB
-	useropq     *queue.Service
-	b           *bucket.Bucket
-	firebase    *firebase.PushService
+	chainId  *big.Int
+	evm      indexer.EVMRequester
+	db       *db.DB
+	useropq  *queue.Service
+	b        *bucket.Bucket
+	firebase *firebase.PushService
 }
 
-func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr string, evm indexer.EVMRequester, db *db.DB, useropq *queue.Service, b *bucket.Bucket, firebase *firebase.PushService) *Router {
+func NewServer(chainId *big.Int, evm indexer.EVMRequester, db *db.DB, useropq *queue.Service, b *bucket.Bucket, firebase *firebase.PushService) *Router {
 	return &Router{
 		chainId,
-		apiKey,
-		epAddr,
-		accFactAddr,
-		prfAddr,
 		evm,
 		db,
 		useropq,
@@ -54,11 +45,6 @@ func NewServer(chainId *big.Int, apiKey string, epAddr, accFactAddr, prfAddr str
 
 func (r *Router) CreateHandler() (http.Handler, error) {
 	cr := chi.NewRouter()
-
-	comm, err := ethrequest.NewCommunity(r.evm, r.epAddr, r.accFactAddr, r.prfAddr)
-	if err != nil {
-		return nil, err
-	}
 
 	// configure middleware
 	cr.Use(middleware.RequestID)
@@ -73,17 +59,13 @@ func (r *Router) CreateHandler() (http.Handler, error) {
 	// instantiate handlers
 	l := logs.NewService(r.chainId, r.db, r.evm)
 	ev := events.NewService(r.db)
-	pr := profiles.NewService(r.b, r.evm, comm)
-	pu := push.NewService(r.db, comm)
-	acc := accounts.NewService(r.evm, r.accFactAddr, r.db)
+	pr := profiles.NewService(r.b, r.evm)
+	pu := push.NewService(r.db)
+	acc := accounts.NewService(r.evm, r.db)
 
 	pm := paymaster.NewService(r.evm, r.db)
 	uop := userop.NewService(r.evm, r.db, r.useropq, r.chainId)
 	ch := chain.NewService(r.evm, r.chainId)
-
-	// instantiate legacy handlers
-	legl := logs.NewLegacyService(r.chainId, r.db, comm)
-	legpr := profiles.NewLegacyService(r.b, comm)
 
 	// configure routes
 	cr.Route("/logs/v2/transfers", func(cr chi.Router) {
@@ -130,26 +112,6 @@ func (r *Router) CreateHandler() (http.Handler, error) {
 			"eth_sendUserOperation":     uop.Send,
 			"eth_chainId":               ch.ChainId,
 		}))
-	})
-
-	// configure legacy routes
-	cr.Route("/logs/transfers", func(cr chi.Router) {
-		// legacy support: for versions < 1.0.37
-		cr.Route("/{contract_address}", func(cr chi.Router) {
-			cr.Get("/{addr}", legl.Get)
-			cr.Get("/{addr}/new", legl.GetNew)
-
-			cr.Post("/{addr}", withSignature(r.evm, legl.AddSending))
-
-			cr.Patch("/{addr}/{hash}", withSignature(r.evm, legl.SetStatus))
-		})
-	})
-
-	cr.Route("/profiles", func(cr chi.Router) {
-		// legacy support: for versions < 1.0.37
-		cr.Put("/{acc_addr}", withMultiPartSignature(r.evm, legpr.PinMultiPartProfile))
-		cr.Patch("/{acc_addr}", withSignature(r.evm, legpr.PinProfile))
-		cr.Delete("/{acc_addr}", withSignature(r.evm, legpr.Unpin))
 	})
 
 	return cr, nil

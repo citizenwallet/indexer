@@ -13,19 +13,15 @@ import (
 )
 
 type Config struct {
-	RPCChainName          string
-	RPCURL                string `env:"RPC_URL,default=http://localhost:8545"`
-	RPCWSURL              string `env:"RPC_WS_URL,default=ws://localhost:8545"`
-	EntryPointAddress     string
-	AccountFactoryAddress string
-	ProfileAddress        string
-	APIKEY                string
-	SentryURL             string `env:"SENTRY_URL"`
-	PinataBaseURL         string `env:"PINATA_BASE_URL"`
-	PinataAPIKey          string `env:"PINATA_API_KEY"`
-	PinataAPISecret       string `env:"PINATA_API_SECRET"`
-	DiscordURL            string `env:"DISCORD_URL,required"`
-	DBSecret              string `env:"DB_SECRET,required"`
+	RPCChainName    string
+	RPCURL          string `env:"RPC_URL,default=http://localhost:8545"`
+	RPCWSURL        string `env:"RPC_WS_URL,default=ws://localhost:8545"`
+	SentryURL       string `env:"SENTRY_URL"`
+	PinataBaseURL   string `env:"PINATA_BASE_URL"`
+	PinataAPIKey    string `env:"PINATA_API_KEY"`
+	PinataAPISecret string `env:"PINATA_API_SECRET"`
+	DiscordURL      string `env:"DISCORD_URL,required"`
+	DBSecret        string `env:"DB_SECRET,required"`
 }
 
 func New(ctx context.Context, envpath, confpath string) (*Config, error) {
@@ -63,10 +59,6 @@ func New(ctx context.Context, envpath, confpath string) (*Config, error) {
 
 	// set config values
 	cfg.RPCChainName = commconf.Community.Name
-	cfg.EntryPointAddress = commconf.ERC4337.EntrypointAddress
-	cfg.AccountFactoryAddress = commconf.ERC4337.AccountFactoryAddress
-	cfg.ProfileAddress = commconf.Profile.Address
-	cfg.APIKEY = commconf.Indexer.Key
 
 	return cfg, nil
 }

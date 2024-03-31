@@ -179,7 +179,7 @@ func main() {
 		quitAck <- useropq.Start(op)
 	}()
 
-	api := router.NewServer(chid, conf.APIKEY, conf.EntryPointAddress, conf.AccountFactoryAddress, conf.ProfileAddress, evm, d, useropq, bu, fb)
+	api := router.NewServer(chid, evm, d, useropq, bu, fb)
 
 	go func() {
 		handler, err := api.CreateHandler()

@@ -27,7 +27,7 @@ type EVMRequester interface {
 	BaseFee() (*big.Int, error)
 	EstimateGasPrice() (*big.Int, error)
 	EstimateGasLimit(msg ethereum.CallMsg) (uint64, error)
-	NewTx(nonce uint64, from, to common.Address, data []byte) (*types.Transaction, error)
+	NewTx(nonce uint64, from, to common.Address, data []byte, extraGas bool) (*types.Transaction, error)
 	SendTransaction(tx *types.Transaction) error
 	StorageAt(addr common.Address, slot common.Hash) ([]byte, error)
 

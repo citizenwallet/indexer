@@ -171,7 +171,7 @@ func main() {
 
 	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName, *notify)
 
-	op := queue.NewUserOpService(d, evm)
+	op := queue.NewUserOpService(d, evm, fb)
 
 	useropq := queue.NewService("userop", 3, *useropqbf, ctx, w)
 

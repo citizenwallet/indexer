@@ -10,6 +10,7 @@ import (
 
 	comm "github.com/citizenwallet/indexer/internal/common"
 	"github.com/citizenwallet/indexer/internal/services/db"
+	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
 	"github.com/ethereum/go-ethereum/common"
@@ -23,14 +24,16 @@ type UserOpService struct {
 	mu         sync.Mutex
 	db         *db.DB
 	evm        indexer.EVMRequester
+	fb         *firebase.PushService
 }
 
 func NewUserOpService(db *db.DB,
-	evm indexer.EVMRequester) *UserOpService {
+	evm indexer.EVMRequester, fb *firebase.PushService) *UserOpService {
 	return &UserOpService{
 		inProgress: map[common.Address][]string{},
 		db:         db,
 		evm:        evm,
+		fb:         fb,
 	}
 }
 
@@ -131,7 +134,7 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 		}
 
 		// Create a new transaction
-		tx, err := s.evm.NewTx(nonce, sponsor, sampleTxm.EntryPoint, data)
+		tx, err := s.evm.NewTx(nonce, sponsor, sampleTxm.EntryPoint, data, false)
 		if err != nil {
 			invalid = append(invalid, msgs...)
 			for range msgs {
@@ -157,7 +160,7 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 		s.inProgress[entrypoint] = append(s.inProgress[entrypoint], signedTxHash)
 		s.mu.Unlock()
 
-		insertedTransfers := map[common.Address][]string{}
+		insertedTransfers := map[common.Address][]*indexer.Transfer{}
 
 		for _, txm := range txms {
 			// Detect if this user operation is a transfer using the call data
@@ -203,10 +206,27 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 						// If the transfer database exists, add the transfer log to it
 						tdb.AddTransfer(log)
 
-						insertedTransfers[dest] = append(insertedTransfers[dest], log.Hash)
+						insertedTransfers[dest] = append(insertedTransfers[dest], log)
 					}
 				}
 			}
+		}
+
+		for dest, logs := range insertedTransfers {
+			ptdb, ok := s.db.GetPushTokenDB(dest.Hex())
+			if !ok {
+				ptdb, err = s.db.AddPushTokenDB(dest.Hex())
+				if err != nil {
+					continue
+				}
+			}
+
+			event, err := s.db.EventDB.GetEvent(dest.Hex(), indexer.ERC20)
+			if err != nil {
+				continue
+			}
+
+			go firebase.SendPushForTxs(ptdb, s.fb, event, logs)
 		}
 
 		// Send the signed transaction
@@ -216,13 +236,13 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			e, ok := err.(rpc.Error)
 			if ok && e.ErrorCode() != -32000 {
 				// If it's an RPC error and the error code is not -32000, remove the sending transfer and return the error
-				for dest, hashes := range insertedTransfers {
+				for dest, logs := range insertedTransfers {
 					suffix, err := s.db.TableNameSuffix(dest.Hex())
 					if err == nil {
 						tdb, ok := s.db.TransferDB[suffix]
 						if ok {
-							for _, hash := range hashes {
-								tdb.RemoveTransfer(hash)
+							for _, log := range logs {
+								tdb.RemoveTransfer(log.Hash)
 							}
 						}
 					}
@@ -244,13 +264,13 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 
 			if !strings.Contains(e.Error(), "insufficient funds") {
 				// If the error is not about insufficient funds, remove the sending transfer and return the error
-				for dest, hashes := range insertedTransfers {
+				for dest, logs := range insertedTransfers {
 					suffix, err := s.db.TableNameSuffix(dest.Hex())
 					if err == nil {
 						tdb, ok := s.db.TransferDB[suffix]
 						if ok {
-							for _, hash := range hashes {
-								tdb.SetStatus(hash, string(indexer.TransferStatusFail))
+							for _, log := range logs {
+								tdb.SetStatus(log.Hash, string(indexer.TransferStatusFail))
 							}
 						}
 					}
@@ -270,14 +290,14 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 				continue
 			}
 
-			for dest, hashes := range insertedTransfers {
+			for dest, logs := range insertedTransfers {
 				suffix, err := s.db.TableNameSuffix(dest.Hex())
 				if err == nil {
 					tdb, ok := s.db.TransferDB[suffix]
 
 					if ok {
-						for _, hash := range hashes {
-							tdb.SetStatus(hash, string(indexer.TransferStatusFail))
+						for _, log := range logs {
+							tdb.SetStatus(log.Hash, string(indexer.TransferStatusFail))
 						}
 					}
 				}
@@ -298,32 +318,66 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			continue
 		}
 
-		for dest, hashes := range insertedTransfers {
+		for dest, logs := range insertedTransfers {
 			suffix, err := s.db.TableNameSuffix(dest.Hex())
 			if err == nil {
 				tdb, ok := s.db.TransferDB[suffix]
 				if ok {
-					for _, hash := range hashes {
-						err := tdb.SetStatus(hash, string(indexer.TransferStatusPending))
+					for _, log := range logs {
+						err := tdb.SetStatus(log.Hash, string(indexer.TransferStatusPending))
 						if err != nil {
-							tdb.RemoveTransfer(hash)
+							tdb.RemoveTransfer(log.Hash)
 						}
 					}
 				}
 			}
 		}
 
+		for dest, logs := range insertedTransfers {
+			ptdb, ok := s.db.GetPushTokenDB(dest.Hex())
+			if !ok {
+				ptdb, err = s.db.AddPushTokenDB(dest.Hex())
+				if err != nil {
+					continue
+				}
+			}
+
+			event, err := s.db.EventDB.GetEvent(dest.Hex(), indexer.ERC20)
+			if err != nil {
+				continue
+			}
+
+			pendingLogs := []*indexer.Transfer{}
+			for _, log := range logs {
+				pendingLogs = append(pendingLogs, &indexer.Transfer{
+					Hash:      log.Hash,
+					TxHash:    log.TxHash,
+					TokenID:   log.TokenID,
+					CreatedAt: log.CreatedAt,
+					FromTo:    log.FromTo,
+					From:      log.From,
+					To:        log.To,
+					Nonce:     log.Nonce,
+					Value:     log.Value,
+					Data:      log.Data,
+					Status:    indexer.TransferStatusPending,
+				})
+			}
+
+			go firebase.SendPushForTxs(ptdb, s.fb, event, pendingLogs)
+		}
+
 		go func() {
 			// async wait for the transaction to be mined
 			err = s.evm.WaitForTx(signedTx)
 			if err != nil {
-				for dest, hashes := range insertedTransfers {
+				for dest, logs := range insertedTransfers {
 					suffix, err := s.db.TableNameSuffix(dest.Hex())
 					if err == nil {
 						tdb, ok := s.db.TransferDB[suffix]
 						if ok {
-							for _, hash := range hashes {
-								tdb.RemoveTransfer(hash)
+							for _, log := range logs {
+								tdb.RemoveTransfer(log.Hash)
 							}
 						}
 					}

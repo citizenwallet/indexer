@@ -2,10 +2,12 @@ package firebase
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
+	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/storage"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"google.golang.org/api/option"
@@ -54,19 +56,37 @@ func (s *PushService) Send(push *indexer.PushMessage) ([]string, error) {
 		tokens = append(tokens, t.Token)
 	}
 
+	data := "{}"
+	if push.Data != nil {
+		data = string(push.Data)
+	}
+
 	message := &messaging.MulticastMessage{
 		Tokens: tokens,
-		Notification: &messaging.Notification{
-			Title: push.Title,
-			Body:  push.Body,
+		Data: map[string]string{
+			"tx_data": data,
 		},
 		APNS: &messaging.APNSConfig{
 			Payload: &messaging.APNSPayload{
 				Aps: &messaging.Aps{
-					Sound: "tx_notification.wav",
+					Sound:            "tx_notification.wav",
+					ContentAvailable: push.Silent,
 				},
 			},
+			Headers: map[string]string{
+				"apns-priority": "10", // Set the priority to 10
+			},
 		},
+		Android: &messaging.AndroidConfig{
+			Priority: "high", // Set the priority to high
+		},
+	}
+
+	if !push.Silent {
+		message.Notification = &messaging.Notification{
+			Title: push.Title,
+			Body:  push.Body,
+		}
 	}
 
 	br, err := s.Messaging.SendEachForMulticast(s.ctx, message)
@@ -87,4 +107,70 @@ func (s *PushService) Send(push *indexer.PushMessage) ([]string, error) {
 	}
 
 	return []string{}, nil
+}
+
+func SendPushForTxs(ptdb *db.PushTokenDB, fb *PushService, ev *indexer.Event, txs []*indexer.Transfer) {
+	accTokens := map[string][]*indexer.PushToken{}
+
+	messages := []*indexer.PushMessage{}
+
+	for _, tx := range txs {
+		if tx.Status == indexer.TransferStatusSuccess {
+			// silent notifications for successful transfers for the senders
+			if _, ok := accTokens[tx.From]; !ok {
+				// get the push tokens for the recipient
+				pt, err := ptdb.GetAccountTokens(tx.From)
+				if err != nil {
+					return
+				}
+
+				if len(pt) == 0 {
+					// no push tokens for this account
+					continue
+				}
+
+				accTokens[tx.From] = pt
+			}
+
+			messages = append(messages, indexer.NewSilentPushMessage(accTokens[tx.From], tx))
+		}
+
+		if _, ok := accTokens[tx.To]; !ok {
+			// get the push tokens for the recipient
+			pt, err := ptdb.GetAccountTokens(tx.To)
+			if err != nil {
+				return
+			}
+
+			if len(pt) == 0 {
+				// no push tokens for this account
+				continue
+			}
+
+			accTokens[tx.To] = pt
+		}
+
+		value := tx.ToRounded(ev.Decimals)
+
+		messages = append(messages, indexer.NewAnonymousPushMessage(accTokens[tx.To], ev.Name, fmt.Sprintf("%.2f", value), ev.Symbol, tx))
+	}
+
+	if len(messages) > 0 {
+		for _, push := range messages {
+			badTokens, err := fb.Send(push)
+			if err != nil {
+				continue
+			}
+
+			if len(badTokens) > 0 {
+				// remove the bad tokens
+				for _, token := range badTokens {
+					err = ptdb.RemovePushToken(token)
+					if err != nil {
+						continue
+					}
+				}
+			}
+		}
+	}
 }

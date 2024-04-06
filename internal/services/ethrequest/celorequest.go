@@ -121,7 +121,7 @@ func (e *CeloService) EstimateGasLimit(msg ethereum.CallMsg) (uint64, error) {
 	return e.client.EstimateGas(e.ctx, msg)
 }
 
-func (e *CeloService) NewTx(nonce uint64, from, to common.Address, data []byte) (*types.Transaction, error) {
+func (e *CeloService) NewTx(nonce uint64, from, to common.Address, data []byte, extraGas bool) (*types.Transaction, error) {
 	baseFee, err := e.BaseFee()
 	if err != nil {
 		return nil, err
@@ -154,11 +154,18 @@ func (e *CeloService) NewTx(nonce uint64, from, to common.Address, data []byte) 
 		return nil, err
 	}
 
+	gasFeeCap := maxFeePerGas
+	gasTipCap := maxPriorityFeePerGas
+	if extraGas {
+		gasFeeCap = new(big.Int).Add(maxFeePerGas, new(big.Int).Div(maxFeePerGas, big.NewInt(5)))
+		gasTipCap = new(big.Int).Add(maxPriorityFeePerGas, new(big.Int).Div(maxPriorityFeePerGas, big.NewInt(5)))
+	}
+
 	// Create a new dynamic fee transaction
 	tx := types.NewTx(&types.DynamicFeeTx{
 		Nonce:     nonce,
-		GasFeeCap: maxFeePerGas,
-		GasTipCap: maxPriorityFeePerGas,
+		GasFeeCap: gasFeeCap,
+		GasTipCap: gasTipCap,
 		Gas:       gasLimit + (gasLimit / 2), // make sure there is some margin for spikes
 		To:        &to,
 		Value:     common.Big0,
@@ -219,7 +226,11 @@ func (e *CeloService) FilterLogs(q ethereum.FilterQuery) ([]types.Log, error) {
 }
 
 func (e *CeloService) WaitForTx(tx *types.Transaction) error {
-	rcpt, err := bind.WaitMined(e.ctx, e.client, tx)
+	// Create a context that will be canceled after 4 seconds
+	ctx, cancel := context.WithTimeout(e.ctx, 10*time.Second)
+	defer cancel() // Cancel the context when the function returns
+
+	rcpt, err := bind.WaitMined(ctx, e.client, tx)
 	if err != nil {
 		return err
 	}

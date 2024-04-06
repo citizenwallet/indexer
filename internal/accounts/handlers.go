@@ -235,7 +235,7 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create a new transaction
-	tx, err := s.evm.NewTx(nonce, sponsor, af, data)
+	tx, err := s.evm.NewTx(nonce, sponsor, af, data, true)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -265,6 +265,7 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO: use the queue here
 	// wait for tx to be mined
 	err = s.evm.WaitForTx(tx)
 	if err != nil {

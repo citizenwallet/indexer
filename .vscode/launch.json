@@ -4,7 +4,6 @@
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
-
     {
       "name": "Launch Node",
       "type": "go",
@@ -60,6 +59,8 @@
         "celo",
         "-dbpath",
         "../../",
+        "-confpath",
+        "../../",
         "-ws"
       ]
     },
@@ -75,8 +76,10 @@
         "-fbpath",
         "../../firebase.json",
         "-dbpath",
-        "../../data/gnosis",
-        "-ws"
+        "../../",
+        "-ws",
+        "-confpath",
+        "../../"
       ]
     },
     {

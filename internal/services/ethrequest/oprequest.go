@@ -152,8 +152,8 @@ func (e *OPService) NewTx(nonce uint64, from, to common.Address, data []byte, ex
 		return nil, err
 	}
 
-	gasFeeCap := new(big.Int).Add(maxFeePerGas, new(big.Int).Div(maxFeePerGas, big.NewInt(10)))
-	gasTipCap := new(big.Int).Add(maxPriorityFeePerGas, new(big.Int).Div(maxPriorityFeePerGas, big.NewInt(10)))
+	gasFeeCap := maxFeePerGas
+	gasTipCap := maxPriorityFeePerGas
 	if extraGas {
 		gasFeeCap = new(big.Int).Add(maxFeePerGas, new(big.Int).Div(maxFeePerGas, big.NewInt(5)))
 		gasTipCap = new(big.Int).Add(maxPriorityFeePerGas, new(big.Int).Div(maxPriorityFeePerGas, big.NewInt(5)))

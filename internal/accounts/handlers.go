@@ -265,6 +265,7 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO: use the queue here
 	// wait for tx to be mined
 	err = s.evm.WaitForTx(tx)
 	if err != nil {

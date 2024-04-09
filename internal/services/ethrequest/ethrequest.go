@@ -297,9 +297,9 @@ func (e *EthService) GetCode(address common.Address) ([]byte, error) {
 	return e.client.CodeAt(e.ctx, address, nil)
 }
 
-func (e *EthService) WaitForTx(tx *types.Transaction) error {
+func (e *EthService) WaitForTx(tx *types.Transaction, timeout int) error {
 	// Create a context that will be canceled after 4 seconds
-	ctx, cancel := context.WithTimeout(e.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(e.ctx, time.Duration(timeout)*time.Second)
 	defer cancel() // Cancel the context when the function returns
 
 	rcpt, err := bind.WaitMined(ctx, e.client, tx)

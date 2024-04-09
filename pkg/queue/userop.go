@@ -369,7 +369,7 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 
 		go func() {
 			// async wait for the transaction to be mined
-			err = s.evm.WaitForTx(signedTx)
+			err = s.evm.WaitForTx(signedTx, 16)
 			if err != nil {
 				for dest, logs := range insertedTransfers {
 					suffix, err := s.db.TableNameSuffix(dest.Hex())

@@ -218,9 +218,9 @@ func (e *OPService) FilterLogs(q ethereum.FilterQuery) ([]types.Log, error) {
 	return e.client.FilterLogs(e.ctx, q)
 }
 
-func (e *OPService) WaitForTx(tx *types.Transaction) error {
+func (e *OPService) WaitForTx(tx *types.Transaction, timeout int) error {
 	// Create a context that will be canceled after 4 seconds
-	ctx, cancel := context.WithTimeout(e.ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(e.ctx, time.Duration(timeout)*time.Second)
 	defer cancel() // Cancel the context when the function returns
 
 	rcpt, err := bind.WaitMined(ctx, e.client, tx)

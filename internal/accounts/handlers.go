@@ -267,7 +267,7 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: use the queue here
 	// wait for tx to be mined
-	err = s.evm.WaitForTx(tx)
+	err = s.evm.WaitForTx(tx, 3)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -461,7 +461,7 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// wait for tx to be mined
-		err = s.evm.WaitForTx(tx)
+		err = s.evm.WaitForTx(tx, 10)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return

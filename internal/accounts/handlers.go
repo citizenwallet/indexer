@@ -460,6 +460,7 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// TODO: use the queue here
 		// wait for tx to be mined
 		err = s.evm.WaitForTx(tx, 10)
 		if err != nil {

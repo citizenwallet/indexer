@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"time"
 
@@ -170,6 +171,15 @@ func main() {
 	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret)
 
 	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName, *notify)
+	defer func() {
+		if r := recover(); r != nil {
+			// in case of a panic, notify the webhook messager with an error notification
+			err := fmt.Errorf("recovered from panic: %v", r)
+			log.Default().Println(err)
+			w.NotifyError(ctx, err)
+			sentry.CaptureException(err)
+		}
+	}()
 
 	op := queue.NewUserOpService(d, evm, fb)
 

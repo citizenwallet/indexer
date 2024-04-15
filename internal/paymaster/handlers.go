@@ -138,7 +138,6 @@ func (s *Service) Sponsor(r *http.Request) (any, int) {
 	}
 
 	// verify the user op
-	sender := userop.Sender
 
 	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Backend())
 	if err != nil {
@@ -158,16 +157,7 @@ func (s *Service) Sponsor(r *http.Request) (any, int) {
 	// verify the nonce
 
 	// get nonce using the account factory since we are not sure if the account has been created yet
-	nonce, err := ep.GetNonce(nil, sender, common.Big0)
-	if err != nil {
-		return nil, http.StatusInternalServerError
-	}
-
-	// make sure that the nonce is correct
-	if nonce.Cmp(userop.Nonce) != 0 {
-		// nonce is wrong
-		return nil, http.StatusBadRequest
-	}
+	nonce := userop.Nonce
 
 	// verify the init code
 	initCode := hexutil.Encode(userop.InitCode)

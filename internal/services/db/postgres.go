@@ -424,10 +424,16 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 
 		log.Default().Println("migrating push tokens")
 
+		rows, err := countRows(d.rdb, fmt.Sprintf("t_push_token_%s", name))
+		if err != nil {
+			return err
+		}
+
 		// migrate all push tokens
 		batchSize := 100
 		offset := 0
 		for {
+			log.Default().Println(offset, "/", rows, "...")
 			rows, err := d.rdb.Query(fmt.Sprintf("SELECT token, account FROM t_push_token_%s ORDER BY token LIMIT $1 OFFSET $2", name), batchSize, offset)
 			if err != nil {
 				log.Fatal(err)
@@ -460,12 +466,19 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 			// Increment the offset by batchSize for the next iteration.
 			offset += batchSize
 		}
+		log.Default().Println(rows, "/", rows)
 
 		log.Default().Println("migrating transfers")
+
+		rows, err = countRows(d.rdb, fmt.Sprintf("t_transfers_%s", name))
+		if err != nil {
+			return err
+		}
 
 		// migrate all transfers
 		offset = 0
 		for {
+			log.Default().Println(offset, "/", rows, "...")
 			rows, err := d.rdb.Query(fmt.Sprintf(`
 				SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 				FROM t_transfers_%s ORDER BY created_at LIMIT $1  OFFSET $2
@@ -495,6 +508,7 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 
 				count++
 			}
+			log.Default().Println(rows, "/", rows)
 
 			log.Default().Println("migrated ", count, " transfer events")
 
@@ -509,4 +523,17 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 	}
 
 	return nil
+}
+
+func countRows(db *sql.DB, tableName string) (int, error) {
+	var count int
+
+	// Prepare the SQL statement
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)
+	err := db.QueryRow(query).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }

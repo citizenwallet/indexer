@@ -508,7 +508,6 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 
 				count++
 			}
-			log.Default().Println(total, "/", total)
 
 			log.Default().Println("migrated ", count, " transfer events")
 
@@ -520,6 +519,7 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 			// Increment the offset by batchSize for the next iteration.
 			offset += txBatchSize
 		}
+		log.Default().Println(total, "/", total)
 	}
 
 	return nil

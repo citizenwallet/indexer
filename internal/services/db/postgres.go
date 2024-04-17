@@ -424,7 +424,7 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 
 		log.Default().Println("migrating push tokens")
 
-		rows, err := countRows(d.rdb, fmt.Sprintf("t_push_token_%s", name))
+		total, err := countRows(d.rdb, fmt.Sprintf("t_push_token_%s", name))
 		if err != nil {
 			return err
 		}
@@ -433,10 +433,10 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 		batchSize := 100
 		offset := 0
 		for {
-			log.Default().Println(offset, "/", rows, "...")
+			log.Default().Println(offset, "/", total, "...")
 			rows, err := d.rdb.Query(fmt.Sprintf("SELECT token, account FROM t_push_token_%s ORDER BY token LIMIT $1 OFFSET $2", name), batchSize, offset)
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 
 			var count int
@@ -466,11 +466,11 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 			// Increment the offset by batchSize for the next iteration.
 			offset += batchSize
 		}
-		log.Default().Println(rows, "/", rows)
+		log.Default().Println(total, "/", total)
 
 		log.Default().Println("migrating transfers")
 
-		rows, err = countRows(d.rdb, fmt.Sprintf("t_transfers_%s", name))
+		total, err = countRows(d.rdb, fmt.Sprintf("t_transfers_%s", name))
 		if err != nil {
 			return err
 		}
@@ -478,13 +478,13 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 		// migrate all transfers
 		offset = 0
 		for {
-			log.Default().Println(offset, "/", rows, "...")
+			log.Default().Println(offset, "/", total, "...")
 			rows, err := d.rdb.Query(fmt.Sprintf(`
 				SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
 				FROM t_transfers_%s ORDER BY created_at LIMIT $1  OFFSET $2
 			`, name), txBatchSize, offset)
 			if err != nil {
-				log.Fatal(err)
+				return err
 			}
 
 			var count int
@@ -508,7 +508,7 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 
 				count++
 			}
-			log.Default().Println(rows, "/", rows)
+			log.Default().Println(total, "/", total)
 
 			log.Default().Println("migrated ", count, " transfer events")
 

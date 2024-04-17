@@ -438,6 +438,7 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 			if err != nil {
 				return err
 			}
+			defer rows.Close()
 
 			var count int
 			for rows.Next() {
@@ -484,6 +485,7 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 			if err != nil {
 				return err
 			}
+			defer rows.Close()
 
 			var count int
 			for rows.Next() {

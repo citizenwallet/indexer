@@ -404,18 +404,22 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 			return err
 		}
 
-		// fetch sponsor
-		sponsor, err := d.SponsorDB.GetSponsor(paymaster)
-		if err != nil {
-			return err
-		}
+		if paymaster != "" {
+			// migrate paymaster if provided
 
-		log.Default().Println("migrating sponsor: ", sponsor.Contract)
+			// fetch sponsor
+			sponsor, err := d.SponsorDB.GetSponsor(paymaster)
+			if err != nil {
+				return err
+			}
 
-		// add sponsor
-		err = sqdb.SponsorDB.AddSponsor(sponsor)
-		if err != nil {
-			return err
+			log.Default().Println("migrating sponsor: ", sponsor.Contract)
+
+			// add sponsor
+			err = sqdb.SponsorDB.AddSponsor(sponsor)
+			if err != nil {
+				return err
+			}
 		}
 
 		log.Default().Println("migrating push tokens")

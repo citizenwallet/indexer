@@ -35,10 +35,6 @@ func main() {
 		log.Fatal("token is required")
 	}
 
-	if paymasterAddr == nil || *paymasterAddr == "" {
-		log.Fatal("paymaster address is required")
-	}
-
 	chid := big.NewInt(int64(*chainId))
 
 	ctx := context.Background()

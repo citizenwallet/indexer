@@ -456,8 +456,6 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 				count++
 			}
 
-			log.Default().Println("migrated ", count, " push tokens")
-
 			if count < batchSize {
 				// If we fetched fewer rows than the batch size, we've fetched all rows.
 				break
@@ -508,8 +506,6 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 
 				count++
 			}
-
-			log.Default().Println("migrated ", count, " transfer events")
 
 			if count < txBatchSize {
 				// If we fetched fewer rows than the batch size, we've fetched all rows.

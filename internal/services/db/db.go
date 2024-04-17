@@ -17,7 +17,7 @@ import (
 
 const (
 	dbBaseFolder   = "data"
-	dbConfigString = "cache=private&_journal=WAL&mode=rwc&_txlock=immediate&_busy_timeout=500"
+	dbConfigString = "cache=private&_journal=WAL&mode=rwc&_txlock=immediate&_busy_timeout=10000"
 )
 
 type DB struct {

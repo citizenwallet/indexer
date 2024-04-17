@@ -65,6 +65,8 @@ func NewDB(chainID *big.Int, basePath, secret string) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	db.SetMaxOpenConns(1)
+
 	// rconnStr := fmt.Sprintf("user=%s password=%s dbname=%s host=%s port=5432 sslmode=disable", username, password, name, rhost)
 	// rdb, err := sql.Open("postgres", rconnStr)
 	// if err != nil {

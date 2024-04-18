@@ -365,6 +365,11 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 			return err
 		}
 
+		err = p.CreatePushTableIndexes()
+		if err != nil {
+			return err
+		}
+
 		pushDB = p
 	}
 
@@ -376,6 +381,11 @@ func (d *PostgresDB) Migrate(sqdb *DB, token, paymaster string, txBatchSize int)
 		}
 
 		err = t.CreateTransferTable()
+		if err != nil {
+			return err
+		}
+
+		err = t.CreateTransferTableIndexes()
 		if err != nil {
 			return err
 		}

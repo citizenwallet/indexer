@@ -17,7 +17,7 @@ import (
 
 const (
 	dbBaseFolder         = "data"
-	dbWriterConfigString = "cache=private&_journal=WAL&mode=rwc&_txlock=immediate&_busy_timeout=10000"
+	dbWriterConfigString = "cache=private&_journal=WAL&mode=rwc"
 	dbReaderConfigString = "cache=private&_journal=WAL&mode=ro"
 )
 
@@ -54,8 +54,6 @@ func NewDB(chainID *big.Int, basePath, secret string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
-
-	db.SetMaxOpenConns(1)
 
 	err = db.Ping()
 	if err != nil {

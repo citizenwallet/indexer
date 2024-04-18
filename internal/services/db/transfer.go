@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -135,11 +134,6 @@ func (db *TransferDB) AddTransfer(tx *indexer.Transfer) error {
 // AddTransfers adds a list of transfers to the db
 func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 
-	dbtx, err := db.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return err
-	}
-
 	for _, t := range tx {
 		// insert transfer on conflict update
 		res, err := db.db.Exec(fmt.Sprintf(`
@@ -147,13 +141,13 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
 			`, db.suffix), t.Hash, t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status)
 		if err != nil {
-			return dbtx.Rollback()
+			return err
 		}
 
 		// check if the transfer was inserted or updated
 		rows, err := res.RowsAffected()
 		if err != nil {
-			return dbtx.Rollback()
+			return err
 		}
 
 		if rows > 0 {
@@ -161,7 +155,7 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 			continue
 		}
 
-		res, err = dbtx.Exec(fmt.Sprintf(`
+		res, err = db.db.Exec(fmt.Sprintf(`
 			UPDATE t_transfers_%s
 			SET
 				tx_hash = $1,
@@ -177,17 +171,17 @@ func (db *TransferDB) AddTransfers(tx []*indexer.Transfer) error {
 			WHERE hash = $11;
 			`, db.suffix), t.TxHash, t.TokenID, t.CreatedAt, t.CombineFromTo(), t.From, t.To, t.Nonce, t.Value.String(), t.Data, t.Status, t.Hash)
 		if err != nil {
-			return dbtx.Rollback()
+			return err
 		}
 
 		// check if the transfer was inserted or updated
 		rows, err = res.RowsAffected()
 		if err != nil {
-			return dbtx.Rollback()
+			return err
 		}
 	}
 
-	return dbtx.Commit()
+	return nil
 }
 
 // SetStatus sets the status of a transfer to pending

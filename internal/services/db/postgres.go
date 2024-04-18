@@ -162,7 +162,7 @@ func NewPostgresDB(chainID *big.Int, username, password, name, host, rhost, secr
 // EventTableExists checks if a table exists in the database
 func (db *PostgresDB) EventTableExists(suffix string) (bool, error) {
 	var exists bool
-	err := db.db.QueryRow(fmt.Sprintf(`
+	err := db.rdb.QueryRow(fmt.Sprintf(`
     SELECT EXISTS (
         SELECT 1
         FROM information_schema.tables
@@ -180,7 +180,7 @@ func (db *PostgresDB) EventTableExists(suffix string) (bool, error) {
 // SponsorTableExists checks if a table exists in the database
 func (db *PostgresDB) SponsorTableExists(suffix string) (bool, error) {
 	var exists bool
-	err := db.db.QueryRow(fmt.Sprintf(`
+	err := db.rdb.QueryRow(fmt.Sprintf(`
     SELECT EXISTS (
         SELECT 1
         FROM information_schema.tables
@@ -198,7 +198,7 @@ func (db *PostgresDB) SponsorTableExists(suffix string) (bool, error) {
 // TransferTableExists checks if a table exists in the database
 func (db *PostgresDB) TransferTableExists(suffix string) (bool, error) {
 	var exists bool
-	err := db.db.QueryRow(fmt.Sprintf(`
+	err := db.rdb.QueryRow(fmt.Sprintf(`
     SELECT EXISTS (
         SELECT 1
         FROM information_schema.tables
@@ -216,7 +216,7 @@ func (db *PostgresDB) TransferTableExists(suffix string) (bool, error) {
 // PushTokenTableExists checks if a table exists in the database
 func (db *PostgresDB) PushTokenTableExists(suffix string) (bool, error) {
 	var exists bool
-	err := db.db.QueryRow(fmt.Sprintf(`
+	err := db.rdb.QueryRow(fmt.Sprintf(`
     SELECT EXISTS (
         SELECT 1
         FROM information_schema.tables

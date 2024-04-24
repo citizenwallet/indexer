@@ -20,7 +20,7 @@ func main() {
 	}
 
 	// Encode the key as a base64 string
-	keyBase64 := base64.StdEncoding.EncodeToString(k)
+	keyBase64 := base64.URLEncoding.EncodeToString(k)
 
 	hexKey := hex.EncodeToString(k)
 

@@ -72,6 +72,7 @@ type creationResponse struct {
 	AccountAddress string `json:"account_address"`
 }
 
+// Deprecated: This is handled by initCode transactions now
 // Create handler for publishing an account
 func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 	// ensure that the address in the request body matches the one in the headers
@@ -403,6 +404,8 @@ func (s *Service) Upgrade(w http.ResponseWriter, r *http.Request) {
 
 	// Check if the account contract is already deployed and deploy if missing
 	if len(acc2bytecode) == 0 {
+		// TODO: re-evaluate the necessity of this. If an account does not exist, how can it be upgraded?
+
 		// upgrade account
 		chainId, err := s.evm.ChainID()
 		if err != nil {

@@ -99,6 +99,7 @@ func (s *Service) Start(p Processor) error {
 				err := errs[i]
 				if err != nil {
 					if msg.RetryCount < s.maxRetries {
+						// Retry the message
 						msg.RetryCount++
 
 						if len(s.queue) < 1 && len(msgs) == 1 {
@@ -110,6 +111,12 @@ func (s *Service) Start(p Processor) error {
 						continue
 					}
 
+					// Message has exceeded the maximum retries
+
+					// return the error to the response channel
+					msg.Respond(nil, err)
+
+					// Notify the webhook messager with an error notification
 					if s.wm != nil {
 						s.wm.NotifyError(s.ctx, err)
 					}

@@ -202,6 +202,16 @@ func (s *Service) Send(r *http.Request) (any, int) {
 	// Enqueue the message
 	s.useropq.Enqueue(*message)
 
+	resp, err := message.WaitForResponse()
+	if err != nil {
+		return nil, http.StatusInternalServerError
+	}
+
+	txHash, ok := resp.(string)
+	if !ok {
+		return nil, http.StatusInternalServerError
+	}
+
 	// Return the message ID
-	return message.ID, http.StatusOK
+	return txHash, http.StatusOK
 }

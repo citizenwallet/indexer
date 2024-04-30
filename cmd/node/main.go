@@ -54,7 +54,7 @@ func main() {
 
 	sync := flag.Int("sync", 1, "sync from block number (default: 1)")
 
-	useropqbf := flag.Int("buffer", 100, "userop queue buffer size (default: 100)")
+	useropqbf := flag.Int("buffer", 1000, "userop queue buffer size (default: 1000)")
 
 	ws := flag.Bool("ws", false, "enable websocket")
 

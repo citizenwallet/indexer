@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"fmt"
 	"math/big"
 	"time"
 
@@ -28,6 +29,25 @@ func (m *Message) Respond(data any, err error) {
 	*m.Response <- MessageResponse{
 		Data: data,
 		Err:  err,
+	}
+}
+
+func (m *Message) WaitForResponse() (any, error) {
+	defer m.Close()
+
+	select {
+	case resp, ok := <-*m.Response:
+		if !ok {
+			return nil, fmt.Errorf("response channel is closed")
+		}
+		// handle response
+		if resp.Err != nil {
+			return nil, resp.Err
+		}
+
+		return resp.Data, nil
+	case <-time.After(time.Second * 12): // timeout so that we don't block the request forever in case the queue is stuck
+		return nil, fmt.Errorf("request timeout")
 	}
 }
 

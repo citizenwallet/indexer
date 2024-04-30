@@ -318,6 +318,11 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			continue
 		}
 
+		// Respond to the messages with the tx hash
+		for _, msg := range msgs {
+			msg.Respond(signedTxHash, nil)
+		}
+
 		for dest, logs := range insertedTransfers {
 			suffix, err := s.db.TableNameSuffix(dest.Hex())
 			if err == nil {

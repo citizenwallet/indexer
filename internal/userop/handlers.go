@@ -202,6 +202,30 @@ func (s *Service) Send(r *http.Request) (any, int) {
 	// Enqueue the message
 	s.useropq.Enqueue(*message)
 
+	var resp indexer.MessageResponse
+
+	select {
+	case resp, ok = <-*message.Response:
+		if !ok {
+			return nil, http.StatusInternalServerError
+		}
+		// handle response
+	case <-time.After(time.Second * 12): // timeout so that we don't block the request forever in case the queue is stuck
+		return nil, http.StatusRequestTimeout
+	}
+
+	if resp.Err != nil {
+		return nil, http.StatusInternalServerError
+	}
+
+	message.Close()
+
+	var txHash string
+	txHash, ok = resp.Data.(string)
+	if !ok {
+		return nil, http.StatusInternalServerError
+	}
+
 	// Return the message ID
-	return message.ID, http.StatusOK
+	return txHash, http.StatusOK
 }

@@ -43,3 +43,6 @@ outputs
 # community
 /config
 community.json
+
+# system files
+.DS_Store

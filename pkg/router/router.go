@@ -17,6 +17,7 @@ import (
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/internal/userop"
+	"github.com/citizenwallet/indexer/internal/version"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/indexer/pkg/queue"
 	"github.com/go-chi/chi/v5"
@@ -57,6 +58,7 @@ func (r *Router) CreateHandler() (http.Handler, error) {
 	cr.Use(middleware.Compress(9))
 
 	// instantiate handlers
+	v := version.NewService()
 	l := logs.NewService(r.chainId, r.db, r.evm)
 	ev := events.NewService(r.db)
 	pr := profiles.NewService(r.b, r.evm)
@@ -68,6 +70,10 @@ func (r *Router) CreateHandler() (http.Handler, error) {
 	ch := chain.NewService(r.evm, r.chainId)
 
 	// configure routes
+	cr.Route("/version", func(cr chi.Router) {
+		cr.Get("/", v.Current)
+	})
+
 	cr.Route("/logs/v2/transfers", func(cr chi.Router) {
 		cr.Route("/{token_address}", func(cr chi.Router) {
 			cr.Get("/", l.GetAll)

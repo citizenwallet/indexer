@@ -45,7 +45,7 @@ jobs:
 
       - name: Modify Version in code
         run: |
-          sed -i "s/Version = \".*\"/Version = \"${{ steps.bump-semver.outputs.new_version }}\"/g" internal/version/version.go
+          sed -i "s/Version = \".*\"/Version = \"${{ steps.bump-semver.outputs.new_version }}\"/g" pkg/indexer/version.go
 
       - name: Build for Linux amd64
         env:

@@ -481,7 +481,7 @@ func (db *TransferDB) GetAllNewTransfers(tokenId int64, fromDate time.Time, limi
 		WHERE created_at >= $1 AND token_id = $2
 		ORDER BY created_at DESC
 		LIMIT $3
-		`, db.suffix), fromDate, tokenId)
+		`, db.suffix), fromDate, tokenId, limit)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return transfers, nil

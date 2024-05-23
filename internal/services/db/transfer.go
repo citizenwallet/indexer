@@ -480,7 +480,7 @@ func (db *TransferDB) GetAllNewTransfers(tokenId int64, fromDate time.Time, limi
 		FROM t_transfers_%s
 		WHERE created_at >= $1 AND token_id = $2
 		ORDER BY created_at DESC
-		LIMIT $7
+		LIMIT $3
 		`, db.suffix), fromDate, tokenId)
 	if err != nil {
 		if err == sql.ErrNoRows {

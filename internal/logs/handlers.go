@@ -91,6 +91,58 @@ func (s *Service) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Service) GetAllNew(w http.ResponseWriter, r *http.Request) {
+	// parse contract address from url params
+	contractAddr := chi.URLParam(r, "token_address")
+
+	// parse fromDate from url query
+	fromDateq, _ := url.QueryUnescape(r.URL.Query().Get("fromDate"))
+
+	t, err := time.Parse(time.RFC3339, fromDateq)
+	if err != nil {
+		t = time.Now()
+	}
+	fromDate := t.UTC()
+
+	// parse pagination params from url query
+	limitq := r.URL.Query().Get("limit")
+
+	limit, err := strconv.Atoi(limitq)
+	if err != nil {
+		limit = 10
+	}
+
+	tokenIdq := r.URL.Query().Get("tokenId")
+	tokenId, err := strconv.Atoi(tokenIdq)
+	if err != nil {
+		tokenId = 0
+	}
+
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	// get logs from db
+	logs, err := tdb.GetAllNewTransfers(int64(tokenId), fromDate, limit)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = com.BodyMultiple(w, logs, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
 // Get godoc
 //
 //		@Summary		Fetch transfer logs

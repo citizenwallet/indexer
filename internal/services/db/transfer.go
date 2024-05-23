@@ -472,6 +472,44 @@ func (db *TransferDB) GetPaginatedTransfers(tokenId int64, addr string, maxDate 
 }
 
 // GetNewTransfers returns the transfers for a given from_addr or to_addr from a given date
+func (db *TransferDB) GetAllNewTransfers(tokenId int64, fromDate time.Time, limit int) ([]*indexer.Transfer, error) {
+	transfers := []*indexer.Transfer{}
+
+	rows, err := db.rdb.Query(fmt.Sprintf(`
+		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
+		FROM t_transfers_%s
+		WHERE created_at >= $1 AND token_id = $2
+		ORDER BY created_at DESC
+		LIMIT $7
+		`, db.suffix), fromDate, tokenId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return transfers, nil
+		}
+
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var transfer indexer.Transfer
+		var value string
+
+		err := rows.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
+		if err != nil {
+			return nil, err
+		}
+
+		transfer.Value = new(big.Int)
+		transfer.Value.SetString(value, 10)
+
+		transfers = append(transfers, &transfer)
+	}
+
+	return transfers, nil
+}
+
+// GetNewTransfers returns the transfers for a given from_addr or to_addr from a given date
 func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate time.Time, limit int) ([]*indexer.Transfer, error) {
 	transfers := []*indexer.Transfer{}
 

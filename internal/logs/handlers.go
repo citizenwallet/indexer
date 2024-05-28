@@ -83,7 +83,7 @@ func (s *Service) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: remove legacy support
-	total := offset + 10
+	total := offset + limit
 
 	err = com.BodyMultiple(w, logs, com.Pagination{Limit: limit, Offset: offset, Total: total})
 	if err != nil {
@@ -144,7 +144,7 @@ func (s *Service) GetAllNew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: remove legacy support
-	total := offset + 10
+	total := offset + limit
 
 	err = com.BodyMultiple(w, logs, com.Pagination{Limit: limit, Offset: offset, Total: total})
 	if err != nil {
@@ -224,7 +224,7 @@ func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: remove legacy support
-	total := offset + 10
+	total := offset + limit
 
 	err = com.BodyMultiple(w, logs, com.Pagination{Limit: limit, Offset: offset, Total: total})
 	if err != nil {
@@ -290,7 +290,7 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: remove legacy support
-	total := offset + 10
+	total := offset + limit
 
 	err = com.BodyMultiple(w, logs, com.Pagination{Limit: limit, Offset: offset, Total: total})
 	if err != nil {

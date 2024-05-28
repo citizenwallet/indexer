@@ -106,10 +106,16 @@ func (s *Service) GetAllNew(w http.ResponseWriter, r *http.Request) {
 
 	// parse pagination params from url query
 	limitq := r.URL.Query().Get("limit")
+	offsetq := r.URL.Query().Get("offset")
 
 	limit, err := strconv.Atoi(limitq)
 	if err != nil {
-		limit = 10
+		limit = 20
+	}
+
+	offset, err := strconv.Atoi(offsetq)
+	if err != nil {
+		offset = 0
 	}
 
 	tokenIdq := r.URL.Query().Get("tokenId")
@@ -131,13 +137,16 @@ func (s *Service) GetAllNew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get logs from db
-	logs, err := tdb.GetAllNewTransfers(int64(tokenId), fromDate, limit)
+	logs, err := tdb.GetAllNewTransfers(int64(tokenId), fromDate, limit, offset)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	err = com.BodyMultiple(w, logs, nil)
+	// TODO: remove legacy support
+	total := offset + 10
+
+	err = com.BodyMultiple(w, logs, com.Pagination{Limit: limit, Offset: offset, Total: total})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -241,10 +250,16 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 
 	// parse pagination params from url query
 	limitq := r.URL.Query().Get("limit")
+	offsetq := r.URL.Query().Get("offset")
 
 	limit, err := strconv.Atoi(limitq)
 	if err != nil {
-		limit = 10
+		limit = 20
+	}
+
+	offset, err := strconv.Atoi(offsetq)
+	if err != nil {
+		offset = 0
 	}
 
 	tokenIdq := r.URL.Query().Get("tokenId")
@@ -268,13 +283,16 @@ func (s *Service) GetNew(w http.ResponseWriter, r *http.Request) {
 	chkaddr := com.ChecksumAddress(accaddr)
 
 	// get logs from db
-	logs, err := tdb.GetNewTransfers(int64(tokenId), chkaddr, fromDate, limit)
+	logs, err := tdb.GetNewTransfers(int64(tokenId), chkaddr, fromDate, limit, offset)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	err = com.BodyMultiple(w, logs, nil)
+	// TODO: remove legacy support
+	total := offset + 10
+
+	err = com.BodyMultiple(w, logs, com.Pagination{Limit: limit, Offset: offset, Total: total})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}

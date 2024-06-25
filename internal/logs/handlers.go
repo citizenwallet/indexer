@@ -30,6 +30,42 @@ func NewService(chainID *big.Int, db *db.DB, evm indexer.EVMRequester) *Service 
 	}
 }
 
+func (s *Service) GetSingle(w http.ResponseWriter, r *http.Request) {
+	// parse contract address from url params
+	contractAddr := chi.URLParam(r, "token_address")
+
+	// parse hash from url params
+	hash := chi.URLParam(r, "hash")
+
+	if hash == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	name, err := s.db.TableNameSuffix(contractAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	tdb, ok := s.db.TransferDB[name]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	tx, err := tdb.GetTransfer(hash)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	err = com.Body(w, tx, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
 func (s *Service) GetAll(w http.ResponseWriter, r *http.Request) {
 	// parse contract address from url params
 	contractAddr := chi.URLParam(r, "token_address")

@@ -77,6 +77,7 @@ func (r *Router) CreateHandler() (http.Handler, error) {
 	cr.Route("/logs/v2/transfers", func(cr chi.Router) {
 		cr.Route("/{token_address}", func(cr chi.Router) {
 			cr.Get("/", l.GetAll)
+			cr.Get("/tx/{hash}", l.GetSingle)
 			cr.Get("/new", l.GetAllNew)
 			cr.Get("/{acc_addr}", l.Get)
 			cr.Get("/{acc_addr}/new", l.GetNew)

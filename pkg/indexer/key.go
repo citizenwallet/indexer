@@ -13,10 +13,10 @@ func GeneratePrivateKey() (*ecdsa.PrivateKey, error) {
 }
 
 // generate a new private key
-func GenerateHexPrivateKey() (string, error) {
+func GenerateHexPrivateKey() (string, string, error) {
 	pk, err := crypto.GenerateKey()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	// Convert the private key to bytes
@@ -25,5 +25,15 @@ func GenerateHexPrivateKey() (string, error) {
 	// Convert the bytes to a hexadecimal string
 	privateKeyHex := hex.EncodeToString(privateKeyBytes)
 
-	return privateKeyHex, nil
+	// Get the ethereum address of the private key
+	publicKey := pk.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return "", "", err
+	}
+
+	// Get the ethereum address of the public key
+	address := crypto.PubkeyToAddress(*publicKeyECDSA).Hex()
+
+	return privateKeyHex, address, nil
 }

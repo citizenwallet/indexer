@@ -10,10 +10,11 @@ func main() {
 	log.Default().Println("generating...")
 	log.Default().Println(" ")
 
-	pk, err := indexer.GenerateHexPrivateKey()
+	pk, address, err := indexer.GenerateHexPrivateKey()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	log.Default().Printf("private key: %s\n", pk)
+	log.Default().Printf("address: %s\n", address)
 }

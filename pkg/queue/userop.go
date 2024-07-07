@@ -176,16 +176,21 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			}
 
 			// Parse the ERC20 transfer from the call data
-			dest, toaddr, amount, parseErr := comm.ParseERC20Transfer(userop.CallData)
+			dest, fromaddr, toaddr, amount, parseErr := comm.ParseERC20Transfer(userop.CallData, s.evm)
 			if parseErr == nil {
 				// If the parsing is successful, this is an ERC20 transfer
+
+				from := userop.Sender.Hex()
+				if fromaddr != (common.Address{}) {
+					from = fromaddr.Hex()
+				}
 
 				// Create a new transfer log
 				log = &indexer.Transfer{
 					TxHash:    signedTxHash,
 					TokenID:   0,
 					CreatedAt: time.Now().UTC(),
-					From:      userop.Sender.Hex(),
+					From:      from,
 					To:        toaddr.Hex(),
 					Nonce:     userop.Nonce.Int64(),
 					Value:     amount,

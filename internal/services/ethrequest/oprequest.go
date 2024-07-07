@@ -61,6 +61,10 @@ func (e *OPService) BlockTime(number *big.Int) (uint64, error) {
 	return v, nil
 }
 
+func (e *OPService) CallContract(call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+	return e.client.CallContract(e.ctx, call, blockNumber)
+}
+
 func (e *OPService) ListenForLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- types.Log) error {
 	for {
 		sub, err := e.client.SubscribeFilterLogs(ctx, q, ch)

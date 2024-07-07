@@ -1,10 +1,16 @@
 package common
 
 import (
+	"context"
+	"encoding/hex"
 	"math/big"
 	"testing"
 
+	"github.com/citizenwallet/indexer/pkg/indexer"
+	ethereum "github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 var testCases = []string{
@@ -16,6 +22,7 @@ var testCases = []string{
 
 type caseResult struct {
 	Dest   common.Address
+	From   common.Address
 	To     common.Address
 	Amount *big.Int
 	Err    error
@@ -24,23 +31,27 @@ type caseResult struct {
 var expected = []caseResult{
 	{
 		Dest:   common.HexToAddress("0x"),
+		From:   common.Address{},
 		To:     common.HexToAddress("0x"),
 		Amount: big.NewInt(0),
 		Err:    ErrInvalidCalldata,
 	},
 	{
 		Dest:   common.HexToAddress("0x5815E61eF72c9E6107b5c5A05FD121F334f7a7f1"),
+		From:   common.Address{},
 		To:     common.HexToAddress("0x29d755C17df3ED2eCAE6e42d694fb4F7E2ff6010"),
 		Amount: big.NewInt(1),
 	},
 	{
 		Dest:   common.HexToAddress("0x"),
+		From:   common.Address{},
 		To:     common.HexToAddress("0x"),
 		Amount: big.NewInt(0),
 		Err:    ErrNotTransfer,
 	},
 	{
 		Dest:   common.HexToAddress("0x5815E61eF72c9E6107b5c5A05FD121F334f7a7f1"),
+		From:   common.HexToAddress("0x3A5b94BB05083Bd3Ac33AfADa5c42Fb232C5020e"),
 		To:     common.HexToAddress("0xcfa21B33D304D57c4E964e3819588Eb5ac06B4D9"),
 		Amount: big.NewInt(1000000),
 	},
@@ -50,7 +61,9 @@ func TestParseERC20Transfer(t *testing.T) {
 	for i, tc := range testCases {
 		data := common.FromHex(tc)
 
-		dest, to, amount, err := ParseERC20Transfer(data)
+		evm := NewMockEVMRequester()
+
+		dest, from, to, amount, err := ParseERC20Transfer(data, evm)
 		if err != nil {
 			if err != expected[i].Err {
 				t.Errorf("err = %s, want %s", err, expected[i].Err)
@@ -62,6 +75,10 @@ func TestParseERC20Transfer(t *testing.T) {
 			t.Errorf("dest = %s, want %s", dest, expected[i].Dest)
 		}
 
+		if from != expected[i].From {
+			t.Errorf("from = %s, want %s", from, expected[i].From)
+		}
+
 		if to != expected[i].To {
 			t.Errorf("to = %s, want %s", to, expected[i].To)
 		}
@@ -70,4 +87,110 @@ func TestParseERC20Transfer(t *testing.T) {
 			t.Errorf("amount = %s, want %s", amount, expected[i].Amount)
 		}
 	}
+}
+
+type MockEVMRequester struct{}
+
+func NewMockEVMRequester() indexer.EVMRequester {
+	return &MockEVMRequester{}
+}
+
+// Backend implements indexer.EVMRequester.
+func (m *MockEVMRequester) Backend() bind.ContractBackend {
+	panic("unimplemented")
+}
+
+// BaseFee implements indexer.EVMRequester.
+func (m *MockEVMRequester) BaseFee() (*big.Int, error) {
+	panic("unimplemented")
+}
+
+// BlockTime implements indexer.EVMRequester.
+func (m *MockEVMRequester) BlockTime(number *big.Int) (uint64, error) {
+	panic("unimplemented")
+}
+
+// CallContract implements indexer.EVMRequester.
+func (m *MockEVMRequester) CallContract(call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+	result := "0000000000000000000000003A5b94BB05083Bd3Ac33AfADa5c42Fb232C5020e"
+
+	print(result)
+
+	// Decode the hex string into a byte slice
+	decodedBytes, err := hex.DecodeString(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return decodedBytes, nil
+}
+
+// ChainID implements indexer.EVMRequester.
+func (m *MockEVMRequester) ChainID() (*big.Int, error) {
+	panic("unimplemented")
+}
+
+// Close implements indexer.EVMRequester.
+func (m *MockEVMRequester) Close() {
+	panic("unimplemented")
+}
+
+// CodeAt implements indexer.EVMRequester.
+func (m *MockEVMRequester) CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error) {
+	panic("unimplemented")
+}
+
+// Context implements indexer.EVMRequester.
+func (m *MockEVMRequester) Context() context.Context {
+	panic("unimplemented")
+}
+
+// EstimateGasLimit implements indexer.EVMRequester.
+func (m *MockEVMRequester) EstimateGasLimit(msg ethereum.CallMsg) (uint64, error) {
+	panic("unimplemented")
+}
+
+// EstimateGasPrice implements indexer.EVMRequester.
+func (m *MockEVMRequester) EstimateGasPrice() (*big.Int, error) {
+	panic("unimplemented")
+}
+
+// FilterLogs implements indexer.EVMRequester.
+func (m *MockEVMRequester) FilterLogs(q ethereum.FilterQuery) ([]types.Log, error) {
+	panic("unimplemented")
+}
+
+// LatestBlock implements indexer.EVMRequester.
+func (m *MockEVMRequester) LatestBlock() (*big.Int, error) {
+	panic("unimplemented")
+}
+
+// ListenForLogs implements indexer.EVMRequester.
+func (m *MockEVMRequester) ListenForLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- types.Log) error {
+	panic("unimplemented")
+}
+
+// NewTx implements indexer.EVMRequester.
+func (m *MockEVMRequester) NewTx(nonce uint64, from common.Address, to common.Address, data []byte, extraGas bool) (*types.Transaction, error) {
+	panic("unimplemented")
+}
+
+// NonceAt implements indexer.EVMRequester.
+func (m *MockEVMRequester) NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error) {
+	panic("unimplemented")
+}
+
+// SendTransaction implements indexer.EVMRequester.
+func (m *MockEVMRequester) SendTransaction(tx *types.Transaction) error {
+	panic("unimplemented")
+}
+
+// StorageAt implements indexer.EVMRequester.
+func (m *MockEVMRequester) StorageAt(addr common.Address, slot common.Hash) ([]byte, error) {
+	panic("unimplemented")
+}
+
+// WaitForTx implements indexer.EVMRequester.
+func (m *MockEVMRequester) WaitForTx(tx *types.Transaction, timeout int) error {
+	panic("unimplemented")
 }

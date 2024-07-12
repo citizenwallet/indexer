@@ -10,12 +10,10 @@ import (
 	"time"
 
 	"github.com/citizenwallet/indexer/internal/config"
-	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/internal/services/ethrequest"
 	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/internal/services/webhook"
-	"github.com/citizenwallet/indexer/pkg/index"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	"github.com/citizenwallet/indexer/pkg/queue"
 	"github.com/citizenwallet/indexer/pkg/router"
@@ -52,17 +50,11 @@ func main() {
 
 	port := flag.Int("port", 3000, "port to listen on")
 
-	sync := flag.Int("sync", 1, "sync from block number (default: 1)")
-
 	useropqbf := flag.Int("buffer", 1000, "userop queue buffer size (default: 1000)")
 
 	ws := flag.Bool("ws", false, "enable websocket")
 
 	notify := flag.Bool("notify", true, "enable notifications")
-
-	onlyAPI := flag.Bool("onlyApi", false, "only run api service")
-
-	rate := flag.Int("rate", 10, "rate to sync (default: 10)")
 
 	evmtype := flag.String("evm", string(indexer.EVMTypeEthereum), "which evm to use (default: ethereum)")
 
@@ -148,28 +140,6 @@ func main() {
 
 	fb := firebase.NewPushService(ctx, *fbpath)
 
-	if !*onlyAPI {
-		i, err := index.New(*rate, chid, d, evm, fb)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer i.Close()
-
-		go func() {
-			if *ws {
-				log.Default().Println("starting index service in websocket mode...")
-				quitAck <- i.ListenBackground(ctx)
-			} else {
-				log.Default().Println("starting index service...")
-				quitAck <- i.Background(*sync)
-			}
-		}()
-	}
-
-	log.Default().Println("starting api service...")
-
-	bu := bucket.NewBucket(conf.PinataBaseURL, conf.PinataAPIKey, conf.PinataAPISecret)
-
 	w := webhook.NewMessager(conf.DiscordURL, conf.RPCChainName, *notify)
 	defer func() {
 		if r := recover(); r != nil {
@@ -180,6 +150,8 @@ func main() {
 			sentry.CaptureException(err)
 		}
 	}()
+
+	log.Default().Println("starting bundler service...")
 
 	op := queue.NewUserOpService(d, evm, fb)
 
@@ -195,7 +167,6 @@ func main() {
 		router := api.CreateBaseRouter()
 
 		api.AddMiddleware(router)
-		api.AddIndexerRoutes(router, bu)
 		api.AddBundlerRoutes(router, useropq)
 
 		if *port == 443 {

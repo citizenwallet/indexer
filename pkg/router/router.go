@@ -15,7 +15,6 @@ import (
 	"github.com/citizenwallet/indexer/internal/push"
 	"github.com/citizenwallet/indexer/internal/services/bucket"
 	"github.com/citizenwallet/indexer/internal/services/db"
-	"github.com/citizenwallet/indexer/internal/services/firebase"
 	"github.com/citizenwallet/indexer/internal/userop"
 	"github.com/citizenwallet/indexer/internal/version"
 	"github.com/citizenwallet/indexer/pkg/indexer"
@@ -25,27 +24,25 @@ import (
 )
 
 type Router struct {
-	chainId  *big.Int
-	evm      indexer.EVMRequester
-	db       *db.DB
-	useropq  *queue.Service
-	b        *bucket.Bucket
-	firebase *firebase.PushService
+	chainId *big.Int
+	evm     indexer.EVMRequester
+	db      *db.DB
 }
 
-func NewServer(chainId *big.Int, evm indexer.EVMRequester, db *db.DB, useropq *queue.Service, b *bucket.Bucket, firebase *firebase.PushService) *Router {
+func NewServer(chainId *big.Int, evm indexer.EVMRequester, db *db.DB) *Router {
 	return &Router{
 		chainId,
 		evm,
 		db,
-		useropq,
-		b,
-		firebase,
 	}
 }
 
-func (r *Router) CreateHandler() (http.Handler, error) {
+func (r *Router) CreateBaseRouter() *chi.Mux {
 	cr := chi.NewRouter()
+	return cr
+}
+
+func (r *Router) AddMiddleware(cr *chi.Mux) *chi.Mux {
 
 	// configure middleware
 	cr.Use(middleware.RequestID)
@@ -57,17 +54,18 @@ func (r *Router) CreateHandler() (http.Handler, error) {
 	cr.Use(RequestSizeLimitMiddleware(10 << 20)) // Limit request bodies to 10MB
 	cr.Use(middleware.Compress(9))
 
+	return cr
+}
+
+func (r *Router) AddIndexerRoutes(cr *chi.Mux, b *bucket.Bucket) *chi.Mux {
+
 	// instantiate handlers
 	v := version.NewService()
 	l := logs.NewService(r.chainId, r.db, r.evm)
 	ev := events.NewService(r.db)
-	pr := profiles.NewService(r.b, r.evm)
+	pr := profiles.NewService(b, r.evm)
 	pu := push.NewService(r.db)
 	acc := accounts.NewService(r.evm, r.db)
-
-	pm := paymaster.NewService(r.evm, r.db)
-	uop := userop.NewService(r.evm, r.db, r.useropq, r.chainId)
-	ch := chain.NewService(r.evm, r.chainId)
 
 	// configure routes
 	cr.Route("/version", func(cr chi.Router) {
@@ -113,6 +111,15 @@ func (r *Router) CreateHandler() (http.Handler, error) {
 		})
 	})
 
+	return cr
+}
+
+func (r *Router) AddBundlerRoutes(cr *chi.Mux, useropq *queue.Service) *chi.Mux {
+
+	pm := paymaster.NewService(r.evm, r.db)
+	uop := userop.NewService(r.evm, r.db, useropq, r.chainId)
+	ch := chain.NewService(r.evm, r.chainId)
+
 	cr.Route("/rpc/{pm_address}", func(cr chi.Router) {
 		cr.Post("/", withJSONRPCRequest(map[string]indexer.RPCHandlerFunc{
 			"pm_sponsorUserOperation":   pm.Sponsor,
@@ -122,7 +129,7 @@ func (r *Router) CreateHandler() (http.Handler, error) {
 		}))
 	})
 
-	return cr, nil
+	return cr
 }
 
 func (r *Router) Start(port int, handler http.Handler) error {

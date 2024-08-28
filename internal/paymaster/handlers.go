@@ -14,7 +14,6 @@ import (
 	"github.com/citizenwallet/indexer/internal/services/db"
 	"github.com/citizenwallet/indexer/pkg/indexer"
 	pay "github.com/citizenwallet/smartcontracts/pkg/contracts/paymaster"
-	"github.com/citizenwallet/smartcontracts/pkg/contracts/tokenEntryPoint"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -25,8 +24,9 @@ import (
 
 var (
 	// Allowed function signatures
-	funcSigSingle = crypto.Keccak256([]byte("execute(address,uint256,bytes)"))[:4]
-	funcSigBatch  = crypto.Keccak256([]byte("executeBatch(address[],uint256[],bytes[])"))[:4]
+	funcSigSingle             = crypto.Keccak256([]byte("execute(address,uint256,bytes)"))[:4]
+	funcSigBatch              = crypto.Keccak256([]byte("executeBatch(address[],uint256[],bytes[])"))[:4]
+	funcSigSafeExecFromModule = crypto.Keccak256([]byte("execTransactionFromModule(address,uint256,bytes,uint8)"))[:4]
 
 	// OO Signature limit in seconds
 	ooSigLimit = int64(60 * 60 * 24 * 7)
@@ -137,23 +137,6 @@ func (s *Service) Sponsor(r *http.Request) (any, int) {
 		return nil, http.StatusBadRequest
 	}
 
-	// verify the user op
-
-	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Backend())
-	if err != nil {
-		return nil, http.StatusInternalServerError
-	}
-
-	// verify that the paymaster is the correct one
-	pmaddr, err := ep.Paymaster(nil)
-	if err != nil {
-		return nil, http.StatusInternalServerError
-	}
-
-	if pmaddr != addr {
-		return nil, http.StatusBadRequest
-	}
-
 	// verify the nonce
 
 	// get nonce using the account factory since we are not sure if the account has been created yet
@@ -186,9 +169,8 @@ func (s *Service) Sponsor(r *http.Request) (any, int) {
 
 	// verify the calldata, it should only be allowed to contain the function signatures we allow
 	funcSig := userop.CallData[:4]
-	if !bytes.Equal(funcSig, funcSigSingle) && !bytes.Equal(funcSig, funcSigBatch) {
+	if !bytes.Equal(funcSig, funcSigSingle) && !bytes.Equal(funcSig, funcSigBatch) && !bytes.Equal(funcSig, funcSigSafeExecFromModule) {
 		return nil, http.StatusBadRequest
-
 	}
 
 	addressArg, _ := abi.NewType("address", "address", nil)
@@ -204,6 +186,24 @@ func (s *Service) Sponsor(r *http.Request) (any, int) {
 		abi.Argument{
 			Type: bytesArg,
 		},
+	}
+	if pt.Type == "cw-safe" {
+		operationArg, _ := abi.NewType("uint8", "uint8", nil)
+
+		callArgs = abi.Arguments{
+			abi.Argument{
+				Type: addressArg,
+			},
+			abi.Argument{
+				Type: uint256Arg,
+			},
+			abi.Argument{
+				Type: bytesArg,
+			},
+			abi.Argument{
+				Type: operationArg,
+			},
+		}
 	}
 
 	// Unpack the values
@@ -398,26 +398,9 @@ func (s *Service) OOSponsor(r *http.Request) (any, int) {
 		return nil, http.StatusBadRequest
 	}
 
-	// verify the user op
-	// sender := userop.Sender
-
-	ep, err := tokenEntryPoint.NewTokenEntryPoint(common.HexToAddress(epAddr), s.evm.Backend())
-	if err != nil {
-		return nil, http.StatusInternalServerError
-	}
-
-	pmaddr, err := ep.Paymaster(nil)
-	if err != nil {
-		return nil, http.StatusInternalServerError
-	}
-
-	if pmaddr != addr {
-		return nil, http.StatusBadRequest
-	}
-
 	// verify the calldata, it should only be allowed to contain the function signatures we allow
 	funcSig := userop.CallData[:4]
-	if !bytes.Equal(funcSig, funcSigSingle) && !bytes.Equal(funcSig, funcSigBatch) {
+	if !bytes.Equal(funcSig, funcSigSingle) && !bytes.Equal(funcSig, funcSigBatch) && !bytes.Equal(funcSig, funcSigSafeExecFromModule) {
 		return nil, http.StatusBadRequest
 
 	}
@@ -435,6 +418,24 @@ func (s *Service) OOSponsor(r *http.Request) (any, int) {
 		abi.Argument{
 			Type: bytesArg,
 		},
+	}
+	if pt.Type == "cw-safe" {
+		operationArg, _ := abi.NewType("uint8", "uint8", nil)
+
+		callArgs = abi.Arguments{
+			abi.Argument{
+				Type: addressArg,
+			},
+			abi.Argument{
+				Type: uint256Arg,
+			},
+			abi.Argument{
+				Type: bytesArg,
+			},
+			abi.Argument{
+				Type: operationArg,
+			},
+		}
 	}
 
 	// Unpack the values

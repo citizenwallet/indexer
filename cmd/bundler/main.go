@@ -40,7 +40,7 @@ import (
 // @externalDocs.description  OpenAPI
 // @externalDocs.url          https://swagger.io/resources/open-api/
 func main() {
-	log.Default().Println("launching indexer...")
+	log.Default().Println("launching bundler...")
 
 	env := flag.String("env", "", "path to .env file")
 
@@ -48,7 +48,7 @@ func main() {
 
 	certpath := flag.String("certpath", "./certs", "cert folder path")
 
-	port := flag.Int("port", 3000, "port to listen on")
+	port := flag.Int("port", 3001, "port to listen on")
 
 	useropqbf := flag.Int("buffer", 1000, "userop queue buffer size (default: 1000)")
 

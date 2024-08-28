@@ -127,6 +127,26 @@
       ]
     },
     {
+      "name": "Launch WS Bundler [BPAY]",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/bundler/main.go",
+      "args": [
+        "-env",
+        "../../.env",
+        "-port",
+        "3001",
+        "-fbpath",
+        "../../firebase.json",
+        "-dbpath",
+        "../../data/bpay/",
+        "-ws",
+        "-confpath",
+        "../../"
+      ]
+    },
+    {
       "name": "Launch WS Node [GRATITUDE]",
       "type": "go",
       "request": "launch",
@@ -165,6 +185,28 @@
         "-ws",
         "-confpath",
         "../../"
+      ]
+    },
+    {
+      "name": "Launch WS Bundler [ANVIL]",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/bundler/main.go",
+      "args": [
+        "-env",
+        "../../.env",
+        "-evm",
+        "optimism",
+        "-port",
+        "3001",
+        "-fbpath",
+        "../../firebase.json",
+        "-dbpath",
+        "../../data/anvil/",
+        "-confpath",
+        "../../config",
+        "-ws"
       ]
     },
     {

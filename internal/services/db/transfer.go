@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -194,165 +193,10 @@ func (db *TransferDB) SetStatus(status, hash string) error {
 	return err
 }
 
-// SetStatusFromTxHash sets the status of a transfer to pending
-func (db *TransferDB) SetStatusFromHash(status, hash string) error {
-	// if status is success, don't update
-	_, err := db.db.Exec(fmt.Sprintf(`
-	UPDATE t_transfers_%s SET status = $1 WHERE hash = $2 AND status != 'success'
-	`, db.suffix), status, hash)
-
-	return err
-}
-
-// ReconcileTxHash updates transfers to ensure that there are no duplicates
-func (db *TransferDB) ReconcileTxHash(tx *indexer.Transfer) error {
-
-	// check if there are multiple transfers with the same tx_hash
-	var count int
-	row := db.rdb.QueryRow(fmt.Sprintf(`
-	SELECT COUNT(*) FROM t_transfers_%s WHERE tx_hash = $1
-	`, db.suffix), tx.TxHash)
-
-	err := row.Scan(&count)
-	if err != nil {
-		return err
-	}
-
-	if count == 0 {
-		// should be impossible
-		return errors.New("no transfer with tx_hash")
-	}
-
-	// handle the scenario with multiple transfers with the same tx_hash
-
-	// we can assume that the reason there are multiple transfers with the same tx_hash
-	// is because one was inserted due to indexing, meaning it is confirmed
-
-	// delete all transfers with a given tx_hash
-	_, err = db.db.Exec(fmt.Sprintf(`
-	DELETE FROM t_transfers_%s WHERE tx_hash = $1
-	`, db.suffix), tx.TxHash)
-	if err != nil {
-		return err
-	}
-
-	// insert the confirmed transfer
-	res, err := db.db.Exec(fmt.Sprintf(`
-	INSERT OR IGNORE INTO t_transfers_%s (hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'success');
-	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data)
-	if err != nil {
-		return err
-	}
-
-	// check if the transfer was inserted or updated
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rows > 0 {
-		// something was inserted, no need to update
-		return nil
-	}
-
-	_, err = db.db.Exec(fmt.Sprintf(`
-	UPDATE t_transfers_%s SET  
-		tx_hash = $1,
-		token_id = $2,
-		created_at = $3,
-		from_to_addr = $4,
-		from_addr = $5,
-		to_addr = $6,
-		nonce = $7,
-		value = $8,
-		data = $9,
-		status = 'success'
-	WHERE hash = $10;
-	`, db.suffix), tx.Hash, tx.TxHash, tx.TokenID, tx.CreatedAt, tx.CombineFromTo(), tx.From, tx.To, tx.Nonce, tx.Value.String(), tx.Data, tx.Hash)
-
-	return err
-}
-
-// SetTxHash sets the tx hash of a transfer with no tx_hash
-func (db *TransferDB) SetTxHash(txHash, hash string) error {
-	_, err := db.db.Exec(fmt.Sprintf(`
-	UPDATE t_transfers_%s SET tx_hash = $1 WHERE hash = $2 AND tx_hash = ''
-	`, db.suffix), txHash, hash)
-
-	return err
-}
-
-// SetFinalHash sets the hash of a transfer with no tx_hash
-func (db *TransferDB) SetFinalHash(txHash, hash string) error {
-	_, err := db.db.Exec(fmt.Sprintf(`
-	UPDATE t_transfers_%s SET hash = $1, tx_hash = $2 WHERE hash = $3 AND tx_hash = ''
-	`, db.suffix), txHash, txHash, hash)
-
-	return err
-}
-
-// SetTxHash sets the tx hash of a transfer with no tx_hash
-func (db *TransferDB) ReconcileTx(txHash, hash string, nonce int64) error {
-	_, err := db.db.Exec(fmt.Sprintf(`
-	UPDATE t_transfers_%s SET tx_hash = $1, nonce = $2, status = $3 WHERE hash = $4 AND tx_hash = ''
-	`, db.suffix), txHash, nonce, string(indexer.TransferStatusSuccess), hash)
-
-	return err
-}
-
-// TransferExists returns true if the transfer tx_hash exists in the db
-func (db *TransferDB) TransferExists(txHash, from, to, value string) (bool, error) {
-	var count int
-	row := db.rdb.QueryRow(fmt.Sprintf(`
-	SELECT COUNT(*) FROM t_transfers_%s WHERE tx_hash = $1 AND from_addr = $2 AND to_addr = $3 AND value = $4
-	`, db.suffix), txHash, from, to, value)
-
-	err := row.Scan(&count)
-	if err != nil {
-		return false, err
-	}
-
-	return count > 0, nil
-}
-
-// TransferSimilarExists returns true if the transfer tx_hash is empty and to, from and value match in the db
-func (db *TransferDB) TransferSimilarExists(from, to, value string) (string, error) {
-	var hash string
-	row := db.rdb.QueryRow(fmt.Sprintf(`
-	SELECT hash FROM t_transfers_%s WHERE tx_hash = '' AND from_addr = $1 AND to_addr = $2 AND value = $3
-	`, db.suffix), from, to, value)
-
-	err := row.Scan(&hash)
-	if err != nil {
-		return "", err
-	}
-
-	return hash, nil
-}
-
 // RemoveTransfer removes a sending transfer from the db
 func (db *TransferDB) RemoveTransfer(hash string) error {
 	_, err := db.db.Exec(fmt.Sprintf(`
 	DELETE FROM t_transfers_%s WHERE hash = $1 AND status != 'success'
-	`, db.suffix), hash)
-
-	return err
-}
-
-// RemoveSendingTransfer removes a sending transfer from the db
-func (db *TransferDB) RemoveSendingTransfer(hash string) error {
-	_, err := db.db.Exec(fmt.Sprintf(`
-	DELETE FROM t_transfers_%s WHERE hash = $1 AND tx_hash = '' AND status = 'sending'
-	`, db.suffix), hash)
-
-	return err
-}
-
-// RemovePendingTransfer removes a pending transfer from the db
-func (db *TransferDB) RemovePendingTransfer(hash string) error {
-	_, err := db.db.Exec(fmt.Sprintf(`
-	DELETE FROM t_transfers_%s WHERE hash = $1 AND tx_hash = '' AND status = 'pending'
 	`, db.suffix), hash)
 
 	return err
@@ -524,49 +368,6 @@ func (db *TransferDB) GetNewTransfers(tokenId int64, addr string, fromDate time.
 		ORDER BY created_at DESC
 		LIMIT $7 OFFSET $8
 		`, db.suffix, db.suffix), fromDate, tokenId, addr, fromDate, tokenId, addr, limit, offset)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return transfers, nil
-		}
-
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var transfer indexer.Transfer
-		var value string
-
-		err := rows.Scan(&transfer.Hash, &transfer.TxHash, &transfer.TokenID, &transfer.CreatedAt, &transfer.FromTo, &transfer.From, &transfer.To, &transfer.Nonce, &value, &transfer.Data, &transfer.Status)
-		if err != nil {
-			return nil, err
-		}
-
-		transfer.Value = new(big.Int)
-		transfer.Value.SetString(value, 10)
-
-		transfers = append(transfers, &transfer)
-	}
-
-	return transfers, nil
-}
-
-// GetProcessingTransfers returns the transfers for a given from_addr or to_addr from a given date
-func (db *TransferDB) GetProcessingTransfers(limit int) ([]*indexer.Transfer, error) {
-	fromDate := time.Now().UTC()
-	transfers := []*indexer.Transfer{}
-
-	rows, err := db.rdb.Query(fmt.Sprintf(`
-		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
-		FROM t_transfers_%s
-		WHERE status = $1 AND created_at <= $2 AND tx_hash = ''
-		UNION ALL
-		SELECT hash, tx_hash, token_id, created_at, from_to_addr, from_addr, to_addr, nonce, value, data, status
-		FROM t_transfers_%s
-		WHERE status = $3 AND created_at <= $4 AND tx_hash = ''
-		ORDER BY created_at DESC
-		LIMIT $5
-		`, db.suffix, db.suffix), indexer.TransferStatusPending, fromDate, indexer.TransferStatusSending, fromDate, limit)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return transfers, nil

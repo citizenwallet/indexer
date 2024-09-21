@@ -20,6 +20,7 @@ var (
 	executeSigSingle = crypto.Keccak256([]byte("execute(address,uint256,bytes)"))[:4]
 
 	transferSig = crypto.Keccak256([]byte("transfer(address,uint256)"))[:4]
+	mintSig     = crypto.Keccak256([]byte("mint(address,uint256)"))[:4]
 	withdrawSig = crypto.Keccak256([]byte("withdraw(bytes32,address,address,uint256)"))[:4]
 )
 
@@ -52,7 +53,7 @@ func ParseERC20Transfer(calldata []byte, evm indexer.EVMRequester) (common.Addre
 
 	// Depending on the function selector, the arguments are in different positions
 	switch string(trfFuncSelector) {
-	case string(transferSig):
+	case string(transferSig), string(mintSig):
 		// Standard ERC20 transfer
 		funcArgs := args[132:]
 

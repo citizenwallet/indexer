@@ -79,6 +79,9 @@ func (s *PushService) Send(push *indexer.PushMessage) ([]string, error) {
 		},
 		Android: &messaging.AndroidConfig{
 			Priority: "high", // Set the priority to high
+			Notification: &messaging.AndroidNotification{
+				Sound: "tx_notification.wav",
+			},
 		},
 	}
 
@@ -115,26 +118,6 @@ func SendPushForTxs(ptdb *db.PushTokenDB, fb *PushService, ev *indexer.Event, tx
 	messages := []*indexer.PushMessage{}
 
 	for _, tx := range txs {
-		if tx.Status == indexer.TransferStatusSuccess {
-			// silent notifications for successful transfers for the senders
-			if _, ok := accTokens[tx.From]; !ok {
-				// get the push tokens for the recipient
-				pt, err := ptdb.GetAccountTokens(tx.From)
-				if err != nil {
-					return
-				}
-
-				if len(pt) == 0 {
-					// no push tokens for this account
-					continue
-				}
-
-				accTokens[tx.From] = pt
-			}
-
-			messages = append(messages, indexer.NewSilentPushMessage(accTokens[tx.From], tx))
-		}
-
 		if _, ok := accTokens[tx.To]; !ok {
 			// get the push tokens for the recipient
 			pt, err := ptdb.GetAccountTokens(tx.To)

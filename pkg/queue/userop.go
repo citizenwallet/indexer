@@ -217,23 +217,6 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 			}
 		}
 
-		for dest, logs := range insertedTransfers {
-			ptdb, ok := s.db.GetPushTokenDB(dest.Hex())
-			if !ok {
-				ptdb, err = s.db.AddPushTokenDB(dest.Hex())
-				if err != nil {
-					continue
-				}
-			}
-
-			event, err := s.db.EventDB.GetEvent(dest.Hex(), indexer.ERC20)
-			if err != nil {
-				continue
-			}
-
-			go firebase.SendPushForTxs(ptdb, s.fb, event, logs)
-		}
-
 		// Send the signed transaction
 		err = s.evm.SendTransaction(signedTx)
 		if err != nil {
@@ -341,40 +324,6 @@ func (s *UserOpService) Process(messages []indexer.Message) (invalid []indexer.M
 					}
 				}
 			}
-		}
-
-		for dest, logs := range insertedTransfers {
-			ptdb, ok := s.db.GetPushTokenDB(dest.Hex())
-			if !ok {
-				ptdb, err = s.db.AddPushTokenDB(dest.Hex())
-				if err != nil {
-					continue
-				}
-			}
-
-			event, err := s.db.EventDB.GetEvent(dest.Hex(), indexer.ERC20)
-			if err != nil {
-				continue
-			}
-
-			pendingLogs := []*indexer.Transfer{}
-			for _, log := range logs {
-				pendingLogs = append(pendingLogs, &indexer.Transfer{
-					Hash:      log.Hash,
-					TxHash:    log.TxHash,
-					TokenID:   log.TokenID,
-					CreatedAt: log.CreatedAt,
-					FromTo:    log.FromTo,
-					From:      log.From,
-					To:        log.To,
-					Nonce:     log.Nonce,
-					Value:     log.Value,
-					Data:      log.Data,
-					Status:    indexer.TransferStatusPending,
-				})
-			}
-
-			go firebase.SendPushForTxs(ptdb, s.fb, event, pendingLogs)
 		}
 
 		go func() {

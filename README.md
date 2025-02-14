@@ -1,6 +1,8 @@
+# deprecated in favor of >> [dApp Engine](https://github.com/citizenwallet/engine)
+
 <h1 align="center">
   <img style="height: 100px; width: 100px;" src="https://github.com/citizenwallet/indexer/blob/main/logos/logo.png" alt="citizen wallet logo"/><br/>
-  Citizen Wallet
+  Indexer/Bundler
 </h1>
 
 Receive and send citizen coins to pay at participating events.
